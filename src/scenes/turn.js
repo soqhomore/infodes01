@@ -1,7 +1,7 @@
 /** 한 턴: 이동 압박 → 장소 공개 → 사건/식사 → 결정 → 행동 → 결과 */
 import {
   MOVE_PAIN, ACTIONS, FORCE_REST_PAIN, MAX_TURNS, MEAL_TURN, MEAL_OPTIONS,
-  VIEW_CLIP, clampStat, applyMeal, applyRest, applySkip,
+  VIEW_CLIP, DAY_START, formatTime, clampStat, applyMeal, applyRest, applySkip, createTimelineEntry,
 } from '../state.js';
 import { updateDebug, DEBUG } from '../debug.js';
 import { pickEvent, downgradeView } from '../events.js';
@@ -32,10 +32,19 @@ export function showTurn(app, ctx, goto) {
   const timers = [];
   const listeners = [];
   const { rng, deck, turn, records, eventSlots, usedEvents } = ctx;
-  let { pain, drive, budget, rainNextTurn } = ctx;
+  let { pain, drive, budget, rainNextTurn, currentTime } = ctx;
+  currentTime = currentTime || DAY_START;
   const mealRecords = ctx.mealRecords || [];
+  const timeline = ctx.timeline || [];
+  const eventRecords = ctx.eventRecords || [];
   const turnNum = turn + 1;
   const card = deck.draw();
+  const walkMin = card.walkMinutes || 20;
+  const walkStartTime = currentTime;
+  currentTime += walkMin;
+  const arrivalTime = currentTime;
+  const eventTime = walkStartTime + Math.floor(walkMin / 2);
+  timeline.push(createTimelineEntry({ turn: turnNum, type: 'walk', startTime: walkStartTime, minutes: walkMin, label: card.name }));
   const painBeforeMove = pain;
   pain = clampStat(pain + MOVE_PAIN[turn]);
   if (rainNextTurn) { card.view = downgradeView(card.view); rainNextTurn = false; }
@@ -47,28 +56,50 @@ export function showTurn(app, ctx, goto) {
   const cleanup = () => { timers.forEach(clearTimeout); listeners.forEach(({ el, type, fn, opts }) => el.removeEventListener(type, fn, opts)); if (spacingRafId) cancelAnimationFrame(spacingRafId); };
   const actionCard = () => ({ ...card, view: currentView });
   const isOver = () => drive <= 0 || pain >= 100;
-  const leave = (scene, nextTurn = turn) => { cleanup(); goto(scene, { ...ctx, pain, drive, budget, records, mealRecords, rainNextTurn, turn: nextTurn }); };
+  const leave = (scene, nextTurn = turn) => { cleanup(); goto(scene, { ...ctx, pain, drive, budget, records, mealRecords, eventRecords, timeline, rainNextTurn, currentTime, turn: nextTurn }); };
   const placeHTML = () => `<div class="place-stage view-${currentView}"><div class="place-density density-${currentView}"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="place-window" style="--view-width:${VIEW_CLIP[currentView]}%"><div class="place-landscape">${fishSVG()}<span class="place-horizon"></span></div></div><div class="place-caption"><strong>${card.name}</strong><span>${card.indoor ? '실내' : '실외'} · ${currentView === 'wide' ? '열린 시야' : currentView === 'mid' ? '중간 시야' : '좁은 시야'}</span></div></div>`;
   const render = (body, changes = {}) => { wrap.innerHTML = `${statsHTML(pain, drive, budget, changes)}${placeHTML()}${body}`; };
+  const renderJourney = (body = '', changes = {}) => {
+    const journey = card.journey || { route: '다음 장소를 향해 걸었다.', sight: '바람이 곁을 스쳤다.' };
+    wrap.innerHTML = `${statsHTML(pain, drive, budget, changes)}<div class="journey-stage"><div class="journey-meta">${formatTime(walkStartTime)} · ${walkMin}분 걸음</div><div class="journey-line"><span></span></div><p class="journey-route">${journey.route}</p><p class="journey-sight">${journey.sight}</p><small>탭하면 바로 도착한다</small></div>${body}`;
+  };
 
   updateDebug('턴', `${turnNum}/${MAX_TURNS}`); updateDebug('카드', `${card.name} (${currentView})`);
 
+  function showJourney() {
+    let journeyDone = false;
+    const finishJourney = () => {
+      if (journeyDone) return;
+      journeyDone = true;
+      const event = pickEvent(turnNum, eventSlots, { pain, drive, budget, card, turnNum }, usedEvents, rng);
+      if (event) {
+        usedEvents.add(event.id);
+        if (DEBUG) updateDebug('이벤트', event.name);
+        showEvent(event);
+        return;
+      }
+      showPlace();
+    };
+    locked = false;
+    renderJourney();
+    addTimer(finishJourney, 1800);
+    addListener(wrap, 'click', event => { if (!event.target.closest('button')) finishJourney(); });
+  }
+
   function showPlace() {
     locked = false;
-    render(`<div class="turn-info"><div class="turn-number">턴 ${turnNum} / ${MAX_TURNS}</div><p class="pressure-copy">이동했다. 몸이 먼저 반응한다.</p></div><div class="change-strip">통증 ${painBeforeMove} → ${pain} <b class="delta-pain">(+${pain - painBeforeMove})</b></div>`, { pain: pain - painBeforeMove });
+    render(`<div class="turn-info"><div class="turn-number">턴 ${turnNum} / ${MAX_TURNS} · ${formatTime(arrivalTime)}</div><p class="pressure-copy">${walkMin}분 걸어서 도착했다.</p></div><div class="change-strip">통증 ${painBeforeMove} → ${pain} <b class="delta-pain">(+${pain - painBeforeMove})</b></div>`, { pain: pain - painBeforeMove });
     addTimer(proceedContext, 900);
   }
 
   function proceedContext() {
     if (isOver()) return leave(showEnding);
-    const event = pickEvent(turnNum, eventSlots, { pain, drive, budget, card, turnNum }, usedEvents, rng);
-    if (event) { usedEvents.add(event.id); if (DEBUG) updateDebug('이벤트', event.name); return showEvent(event); }
     if (turnNum === MEAL_TURN) return showMeal();
     showDecision();
   }
 
   function showEvent(event) {
-    locked = false; render(`<div class="event-box"><div class="event-name">${event.name}</div><div class="event-desc">${event.describe()}</div></div>`);
+    locked = false; renderJourney(`<div class="event-box"><div class="event-kicker">여행 중 만난 일</div><div class="event-name">${event.name}</div><div class="event-desc">${event.describe()}</div></div>`);
     const choices = event.hasChoice ? event.choices({ pain, drive, budget, card, turnNum }) : [{ label: '그대로 받아들인다' }];
     const buttons = document.createElement('div'); buttons.className = 'choice-buttons';
     choices.forEach((choice, index) => {
@@ -81,9 +112,19 @@ export function showTurn(app, ctx, goto) {
     const before = { pain, drive, budget }; const effect = event.apply({ pain, drive, budget, card, turnNum }, choiceIndex) || {};
     if (effect.pain !== undefined) pain = effect.pain; if (effect.drive !== undefined) drive = effect.drive; if (effect.budget !== undefined) budget = effect.budget;
     if (effect.rainNextTurn) rainNextTurn = true; if (effect.viewOverride) currentView = effect.viewOverride; if (effect.promoteWidest) deck.promoteWidest();
+    const purchased = event.id === 'limitedDessert' && choiceIndex === 0;
+    eventRecords.push({
+      turn: turnNum,
+      type: purchased ? 'purchase' : event.journeyType,
+      name: event.name,
+      description: purchased ? '한정 디저트를 샀다.' : event.describe(),
+      time: eventTime,
+      location: card.name,
+      ...(purchased ? { item: event.name, spend: before.budget - budget } : {}),
+    });
     const changes = { pain: pain - before.pain, drive: drive - before.drive, budget: budget - before.budget };
-    render(`<div class="outcome-panel"><strong>${event.name}</strong><p>통증 ${signed(changes.pain)} / 의지 ${signed(changes.drive)}${changes.budget ? ` / 예산 ${changes.budget < 0 ? '−' : '+'}${formatBudget(Math.abs(changes.budget))}` : ''}</p></div>`, changes);
-    addTimer(() => isOver() ? leave(showEnding) : (turnNum === MEAL_TURN ? showMeal() : showDecision()), AUTO_NEXT_MS);
+    renderJourney(`<div class="outcome-panel"><strong>${event.name}</strong><p>${purchased ? `예산 −${formatBudget(before.budget - budget)}` : `통증 ${signed(changes.pain)} / 의지 ${signed(changes.drive)}${changes.budget ? ` / 예산 ${changes.budget < 0 ? '−' : '+'}${formatBudget(Math.abs(changes.budget))}` : ''}`}</p></div>`, changes);
+    addTimer(() => isOver() ? leave(showEnding) : showPlace(), AUTO_NEXT_MS);
   }
 
   function showMeal() {
@@ -92,9 +133,16 @@ export function showTurn(app, ctx, goto) {
     Object.entries(MEAL_OPTIONS).forEach(([id, meal]) => {
       const button = document.createElement('button'); button.className = 'btn btn-meal'; button.innerHTML = `<span>${formatBudget(meal.spend)}</span>${meal.name}`;
       addListener(button, 'click', () => {
-        if (locked) return; locked = true; const result = applyMeal({ budget, option: id }); budget = result.budgetAfter;
-        mealRecords.push({ turn: turnNum, spend: result.spend, option: id, card: actionCard() });
-        render(`<div class="outcome-panel meal-outcome"><strong>${meal.name}</strong><p>예산 −${formatBudget(result.spend)} · 허기는 해결됨</p><small>통증·의지·만족감에는 직접 영향이 없다.</small></div>`, { budget: -result.spend }); addTimer(showDecision, AUTO_NEXT_MS);
+        if (locked) return;
+        locked = true;
+        const mealStartTime = currentTime;
+        const result = applyMeal({ budget, option: id });
+        budget = result.budgetAfter;
+        currentTime += meal.minutes;
+        const mealEntry = createTimelineEntry({ turn: turnNum, type: 'meal', startTime: mealStartTime, minutes: meal.minutes, label: meal.name });
+        timeline.push(mealEntry);
+        mealRecords.push({ turn: turnNum, spend: result.spend, option: id, card: actionCard(), ...mealEntry });
+        render(`<div class="outcome-panel meal-outcome"><strong>${meal.name}</strong><p>예산 −${formatBudget(result.spend)} · ${meal.minutes}분 · 허기는 해결됨</p><small>통증·의지·만족감에는 직접 영향이 없다.</small></div>`, { budget: -result.spend }); addTimer(showDecision, AUTO_NEXT_MS);
       }); choices.appendChild(button);
     }); wrap.appendChild(choices);
   }
@@ -107,8 +155,12 @@ export function showTurn(app, ctx, goto) {
   }
 
   function doSkip() {
+    const restMin = 5;
+    const restStartTime = currentTime;
+    currentTime += restMin;
     const before = { pain, drive }; const result = applySkip({ pain, drive }); pain = result.painAfter; drive = result.driveAfter;
-    records.push({ turn: turnNum, skipped: true, card: actionCard(), action: null, spend: 0, painBefore: before.pain, painAfter: pain, painRecovered: 0, driveBefore: before.drive, driveAfter: drive, driveDelta: result.driveDelta, satisfaction: 0 });
+    records.push({ turn: turnNum, skipped: true, card: actionCard(), action: null, spend: 0, painBefore: before.pain, painAfter: pain, painRecovered: 0, driveBefore: before.drive, driveAfter: drive, driveDelta: result.driveDelta, satisfaction: 0, walkMinutes: walkMin, restMinutes: restMin, arrivalTime });
+    timeline.push(createTimelineEntry({ turn: turnNum, type: 'skip', startTime: restStartTime, minutes: restMin, label: '지나침' }));
     showTurnOutcome('지나쳤다.', { pain: pain - before.pain, drive: drive - before.drive }, '통증이 더 쌓였고, 의지가 조금 줄었다.');
   }
 
@@ -147,16 +199,20 @@ export function showTurn(app, ctx, goto) {
   }
 
   function doAction(id) {
+    const restMin = ACTIONS[id].restMinutes;
+    const restStartTime = currentTime;
+    currentTime += restMin;
     const before = { pain, drive, budget }; const result = applyRest({ pain, drive, budget, actionId: id, card: actionCard(), rng }); pain = result.painAfter; drive = result.driveAfter; budget = result.budgetAfter;
-    records.push({ turn: turnNum, skipped: false, card: actionCard(), action: id, spend: result.spend, painBefore: before.pain, painAfter: pain, painRecovered: result.painRecovered, driveBefore: before.drive, driveAfter: drive, driveDelta: result.driveDelta, satisfaction: result.satisfaction, reasons: result }); if (DEBUG) updateDebug('만족감', result.satisfaction);
+    records.push({ turn: turnNum, skipped: false, card: actionCard(), action: id, spend: result.spend, painBefore: before.pain, painAfter: pain, painRecovered: result.painRecovered, driveBefore: before.drive, driveAfter: drive, driveDelta: result.driveDelta, satisfaction: result.satisfaction, reasons: result, walkMinutes: walkMin, restMinutes: restMin, arrivalTime }); if (DEBUG) updateDebug('만족감', result.satisfaction);
+    timeline.push(createTimelineEntry({ turn: turnNum, type: 'rest', startTime: restStartTime, minutes: restMin, label: ACTIONS[id].name }));
     const viewText = currentView === 'wide' ? '열린 시야' : currentView === 'mid' ? '중간 시야' : '좁은 시야'; const reason = `${viewText}가 의지를 밀어줬다 (${signed(result.viewBonus)}) · ${result.efficiency < 1 ? `높은 통증으로 회복 효율 ${Math.round(result.efficiency * 100)}%` : '몸이 비교적 잘 회복됐다'}`;
     showTurnOutcome(id === 'spacing' ? '아무것도 안 했다. 개복치도.' : ACTIONS[id].name, { pain: pain - before.pain, drive: drive - before.drive, budget: budget - before.budget }, reason);
   }
 
   function showTurnOutcome(title, changes, reason) {
-    render(`<div class="outcome-panel"><strong>${title}</strong><p>통증 ${changes.pain <= 0 ? '−' : '+'}${Math.abs(changes.pain)} / 의지 ${signed(changes.drive)}${changes.budget ? ` / 예산 −${formatBudget(Math.abs(changes.budget))}` : ''}</p><small>${reason}</small></div><div class="turn-log">${turnNum}턴 · ${card.name} · ${title} · 통증 ${changes.pain <= 0 ? '−' : '+'}${Math.abs(changes.pain)} · 의지 ${signed(changes.drive)}</div>`, changes);
+    render(`<div class="outcome-panel"><strong>${title}</strong><p>통증 ${changes.pain <= 0 ? '−' : '+'}${Math.abs(changes.pain)} / 의지 ${signed(changes.drive)}${changes.budget ? ` / 예산 −${formatBudget(Math.abs(changes.budget))}` : ''}</p><small>${reason}</small></div><div class="turn-log">${formatTime(arrivalTime)} 도착 · ${title} · ${formatTime(currentTime)} 출발</div>`, changes);
     addTimer(() => { if (isOver() || turn + 1 >= MAX_TURNS) return leave(showEnding, turn + 1); leave(showTurn, turn + 1); }, AUTO_NEXT_MS);
   }
 
-  showPlace(); return cleanup;
+  showJourney(); return cleanup;
 }

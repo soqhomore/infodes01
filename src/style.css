@@ -159,6 +159,14 @@ html, body {
 }
 
 .place-stage { width: min(100%, 340px); min-height: 150px; position: relative; overflow: hidden; border-radius: 14px; background: #e8f2f9; }
+.journey-stage { width: min(100%, 340px); min-height: 190px; padding: 24px 22px 18px; border-radius: 14px; color: #234b61; background: linear-gradient(145deg, #dceff5, #f7fbf8); box-shadow: inset 0 -42px 0 rgba(119, 166, 138, .18); }
+.journey-meta { font-size: 13px; color: #648090; }
+.journey-line { height: 4px; margin: 22px 0 20px; border-radius: 4px; overflow: hidden; background: rgba(71, 123, 148, .18); }
+.journey-line span { display: block; width: 72%; height: 100%; border-radius: inherit; background: #5ba3d9; animation: journey-pass 1.8s ease-out both; }
+.journey-route { font-size: 18px; font-weight: 700; line-height: 1.45; }
+.journey-sight { margin-top: 7px; color: #597180; font-size: 14px; line-height: 1.5; }
+.journey-stage small { display: block; margin-top: 14px; color: #78919e; font-size: 11px; text-align: right; }
+@keyframes journey-pass { from { width: 8%; } to { width: 72%; } }
 .place-window { width: var(--view-width); height: 118px; position: relative; margin: 12px auto 0; overflow: hidden; border-radius: 58px 58px 12px 12px; transition: width .45s ease; box-shadow: 0 0 0 1px rgba(43,94,132,.15); }
 .place-landscape { height: 100%; min-width: 340px; background: linear-gradient(#bfe3f2 0 56%, #84b98a 57%); position: relative; left: 50%; transform: translateX(-50%); }
 .place-horizon { position: absolute; height: 18px; left: 0; right: 0; bottom: 0; background: #6aa9c1; opacity: .55; }
@@ -224,6 +232,7 @@ html, body {
   color: #e65100;
   margin-bottom: 6px;
 }
+.event-kicker { margin-bottom: 6px; color: #8d6b25; font-size: 11px; font-weight: 700; }
 
 .event-desc {
   font-size: 14px;
@@ -448,6 +457,38 @@ html, body {
 .svg-marker { font-size: 8px; fill: #607d8b; }
 .svg-meal { font-size: 8px; fill: #9a7b29; }
 .result-bar { cursor: pointer; }
+
+.result-timeline {
+  width: 100%;
+  max-width: 340px;
+  margin-top: 4px;
+}
+
+.timeline-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 10px; font-size: 11px; color: #71808a; }
+.timeline-legend span::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; background: #cde4f0; }.timeline-legend span:nth-child(2)::before { background: #d8ad58; }.timeline-legend span:nth-child(3)::before { background: #7bafd4; }.timeline-legend span:nth-child(4)::before { background: #e0e0e0; }.timeline-legend span:nth-child(5)::before { border-radius: 50%; background: #4d8da9; }
+
+/* ── 출발 ── */
+.departure { background: #f2f8fb; text-align: center; }
+.departure-time { font-size: 13px; color: #71808a; letter-spacing: .04em; }
+.departure-fish { font-size: 72px; color: #5ba3d9; transform: rotate(-8deg); }
+.departure-copy { max-width: 290px; font-size: 20px; line-height: 1.6; }
+.departure-question { color: #71808a; font-size: 14px; }
+.departure-skip { border: 0; background: transparent; color: #71808a; font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
+
+.svg-tl-label {
+  font-size: 9px;
+  fill: #999;
+}
+
+.svg-tl-summary {
+  font-size: 10px;
+  fill: #666;
+}
+.svg-tl-event { font-size: 7px; font-weight: 700; fill: #fff; }
+.svg-tl-purchase { font-size: 8px; fill: #bd7423; }
+.journey-record { width: min(100%, 320px); padding: 10px 12px; color: #53636f; font-size: 12px; line-height: 1.55; border-left: 2px solid #9db6c7; }
+.journey-record ul { padding-left: 18px; margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) { .journey-line span { animation: none; } }
 
 .result-avg {
   font-size: 14px;

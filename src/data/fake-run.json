@@ -11,7 +11,10 @@
     "driveBefore": 45,
     "driveAfter": 56,
     "driveDelta": 11,
-    "satisfaction": 8
+    "satisfaction": 8,
+    "walkMinutes": 35,
+    "restMinutes": 25,
+    "arrivalTime": 635
   },
   {
     "turn": 2,
@@ -25,7 +28,10 @@
     "driveBefore": 56,
     "driveAfter": 53,
     "driveDelta": -3,
-    "satisfaction": 0
+    "satisfaction": 0,
+    "walkMinutes": 15,
+    "restMinutes": 5,
+    "arrivalTime": 675
   },
   {
     "turn": 3,
@@ -39,7 +45,10 @@
     "driveBefore": 53,
     "driveAfter": 54,
     "driveDelta": 1,
-    "satisfaction": 6
+    "satisfaction": 6,
+    "walkMinutes": 25,
+    "restMinutes": 20,
+    "arrivalTime": 720
   },
   {
     "turn": 4,
@@ -53,7 +62,10 @@
     "driveBefore": 54,
     "driveAfter": 58,
     "driveDelta": 4,
-    "satisfaction": 8
+    "satisfaction": 8,
+    "walkMinutes": 30,
+    "restMinutes": 15,
+    "arrivalTime": 795
   },
   {
     "turn": 5,
@@ -67,7 +79,10 @@
     "driveBefore": 58,
     "driveAfter": 53,
     "driveDelta": -5,
-    "satisfaction": 4
+    "satisfaction": 4,
+    "walkMinutes": 10,
+    "restMinutes": 20,
+    "arrivalTime": 840
   },
   {
     "turn": 6,
@@ -81,7 +96,10 @@
     "driveBefore": 53,
     "driveAfter": 52,
     "driveDelta": -1,
-    "satisfaction": 5
+    "satisfaction": 5,
+    "walkMinutes": 30,
+    "restMinutes": 25,
+    "arrivalTime": 895
   },
   {
     "turn": 7,
@@ -95,6 +113,9 @@
     "driveBefore": 52,
     "driveAfter": 40,
     "driveDelta": -12,
-    "satisfaction": 2
+    "satisfaction": 2,
+    "walkMinutes": 15,
+    "restMinutes": 15,
+    "arrivalTime": 935
   }
 ]

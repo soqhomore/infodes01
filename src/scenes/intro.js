@@ -3,11 +3,11 @@
  */
 
 import { DESTINATIONS } from '../deck.js';
-import { showTurn } from './turn.js';
+import { showDeparture } from './departure.js';
 import { createRng } from '../rng.js';
 import { createDeck } from '../deck.js';
 import {
-  INITIAL_PAIN, INITIAL_DRIVE, INITIAL_BUDGET, MAX_TURNS,
+  INITIAL_PAIN, INITIAL_DRIVE, INITIAL_BUDGET, MAX_TURNS, DAY_START,
 } from '../state.js';
 import { updateDebug, DEBUG } from '../debug.js';
 import { assignEventSlots } from '../events.js';
@@ -40,7 +40,7 @@ export function showIntro(app, context, goto) {
       updateDebug('여행지', dest.name);
       if (DEBUG) updateDebug('이벤트', `유혹T${eventSlots.temptation} 부정T${eventSlots.negative} 긍정T${eventSlots.positive}`);
 
-      goto(showTurn, {
+      goto(showDeparture, {
         seed: context.seed,
         rng,
         deck,
@@ -54,6 +54,9 @@ export function showIntro(app, context, goto) {
         usedEvents: new Set(),
         rainNextTurn: false,
         mealRecords: [],
+        timeline: [],
+        currentTime: DAY_START,
+        destinationInfo: dest,
       });
     });
     btnWrap.appendChild(btn);

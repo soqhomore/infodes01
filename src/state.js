@@ -50,21 +50,31 @@ export const VIEW_CLIP = {
   wide: 100,
 };
 
+// ── 하루 시간 (서사용, 수치 영향 없음) ──
+export const DAY_START = 600; // 10:00 = 600분
+
+/** 분 단위 시각을 "HH:MM" 문자열로 */
+export function formatTime(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h}:${String(m).padStart(2, '0')}`;
+}
+
 // ── 행동 정의 ──
 export const ACTIONS = {
-  spacing:  { name: '멍때리기',   initiative: 1, recovery: 14, spendRange: null,        condition: () => true },
-  phone:    { name: '스마트폰',   initiative: 0, recovery: 12, spendRange: null,        condition: () => true },
-  dessert:  { name: '디저트',     initiative: 2, recovery: 9,  spendRange: [600, 1200], condition: (pain, budget) => budget >= 1200 },
-  chat:     { name: '잡담',       initiative: 4, recovery: 10, spendRange: null,        condition: (pain) => pain < 85 },
-  plan:     { name: '계획 짜기',  initiative: 6, recovery: 5,  spendRange: null,        condition: (pain) => pain < 80 },
-  wander:   { name: '돌아다니기', initiative: 7, recovery: 3,  spendRange: null,        condition: (pain, _budget, indoor) => pain < 65 && !indoor },
+  spacing:  { name: '멍때리기',   initiative: 1, recovery: 14, restMinutes: 25, spendRange: null,        condition: () => true },
+  phone:    { name: '스마트폰',   initiative: 0, recovery: 12, restMinutes: 15, spendRange: null,        condition: () => true },
+  dessert:  { name: '디저트',     initiative: 2, recovery: 9,  restMinutes: 20, spendRange: [600, 1200], condition: (pain, budget) => budget >= 1200 },
+  chat:     { name: '잡담',       initiative: 4, recovery: 10, restMinutes: 20, spendRange: null,        condition: (pain) => pain < 85 },
+  plan:     { name: '계획 짜기',  initiative: 6, recovery: 5,  restMinutes: 15, spendRange: null,        condition: (pain) => pain < 80 },
+  wander:   { name: '돌아다니기', initiative: 7, recovery: 3,  restMinutes: 25, spendRange: null,        condition: (pain, _budget, indoor) => pain < 65 && !indoor },
 };
 
 // ── 4턴 고정 식사 (휴식/만족감 계산과 분리) ──
 export const MEAL_TURN = 4;
 export const MEAL_OPTIONS = {
-  bench: { name: '바깥 벤치에서 간단히 먹기', spend: 800 },
-  indoor: { name: '실내 자리에서 천천히 먹기', spend: 1800 },
+  bench: { name: '바깥 벤치에서 간단히 먹기', spend: 800, minutes: 20 },
+  indoor: { name: '실내 자리에서 천천히 먹기', spend: 1800, minutes: 30 },
 };
 
 // ── 통증 80 이상이면 지나치기 불가 ──
@@ -102,6 +112,11 @@ export function rollSpend(rng, spendRange) {
   const [min, max] = spendRange;
   const steps = (max - min) / 100;
   return min + rng.int(0, steps) * 100;
+}
+
+/** 결과 타임라인에 남길 연속 시간 구간 */
+export function createTimelineEntry({ turn, type, startTime, minutes, label }) {
+  return { turn, type, startTime, endTime: startTime + minutes, label };
 }
 
 /**

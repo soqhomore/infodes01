@@ -14,6 +14,7 @@ export const EVENTS = {
   limitedDessert: {
     name: '한정 디저트',
     slot: 'temptation',
+    journeyType: 'sighting',
     condition: () => true,
     hasChoice: true,
     describe: () => '근처 가게에서 한정 디저트를 발견했다!',
@@ -26,7 +27,7 @@ export const EVENTS = {
     },
     apply: (ctx, choiceIdx) => {
       if (choiceIdx === 0) {
-        return { budget: ctx.budget - 2500, drive: clampStat(ctx.drive + 3), pain: clampStat(ctx.pain - 10) };
+        return { budget: ctx.budget - 2500 };
       }
       return {};
     },
@@ -35,6 +36,7 @@ export const EVENTS = {
   stumble: {
     name: '발을 삐끗',
     slot: 'negative',
+    journeyType: 'incident',
     condition: (ctx) => ctx.pain >= 30,
     hasChoice: false,
     describe: () => '발을 삐끗했다!',
@@ -44,6 +46,7 @@ export const EVENTS = {
   rain: {
     name: '비',
     slot: 'negative',
+    journeyType: 'incident',
     condition: (ctx) => ctx.turnNum <= 4,
     hasChoice: false,
     describe: () => '비가 내리기 시작한다.',
@@ -53,6 +56,7 @@ export const EVENTS = {
   festival: {
     name: '축제 발견',
     slot: 'positive',
+    journeyType: 'sighting',
     condition: (ctx) => !ctx.card.indoor,
     hasChoice: true,
     describe: () => '축제를 발견했다!',
@@ -71,6 +75,7 @@ export const EVENTS = {
   sunfishSuggestion: {
     name: '개복치의 제안',
     slot: 'positive',
+    journeyType: 'sighting',
     condition: (ctx) => ctx.turnNum >= 3,
     hasChoice: true,
     describe: () => '개복치가 어딘가를 가리킨다.',
@@ -89,6 +94,7 @@ export const EVENTS = {
   benchFound: {
     name: '벤치 발견',
     slot: 'positive',
+    journeyType: 'sighting',
     condition: (ctx) => ctx.pain >= 50,
     hasChoice: false,
     describe: () => '그늘진 자리를 발견했다.',
