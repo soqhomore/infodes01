@@ -15,13 +15,24 @@ let currentCleanup = null;
  * @param {function} sceneFn - (app, context, goto) => cleanup
  * @param {object} context - 게임 상태
  */
+const FADE_MS = 180;
+
 export function goto(sceneFn, context) {
-  if (currentCleanup) {
-    currentCleanup();
-    currentCleanup = null;
-  }
-  app.innerHTML = '';
-  currentCleanup = sceneFn(app, context, goto) || null;
+  // fade-out
+  app.classList.add('scene-leaving');
+
+  setTimeout(() => {
+    if (currentCleanup) {
+      currentCleanup();
+      currentCleanup = null;
+    }
+    app.innerHTML = '';
+    currentCleanup = sceneFn(app, context, goto) || null;
+
+    // fade-in (force reflow to ensure transition triggers)
+    void app.offsetHeight;
+    app.classList.remove('scene-leaving');
+  }, FADE_MS);
 }
 
 // ── 시드 결정 ──

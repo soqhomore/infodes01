@@ -19,6 +19,11 @@ html, body {
   height: 100dvh;
   overflow-y: auto;
   background: #1a1a1a;
+  transition: opacity 180ms ease;
+}
+
+#app.scene-leaving {
+  opacity: 0;
 }
 
 /* ── 공통 씬 ── */

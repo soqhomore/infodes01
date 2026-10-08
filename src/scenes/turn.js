@@ -489,7 +489,6 @@ export function showTurn(app, ctx, goto) {
 
   function showTurnResult(actionId, driveDelta, skipped, painRecovered, spend) {
     locked = false;
-    removeClip();
 
     let message = '';
     if (skipped) {
