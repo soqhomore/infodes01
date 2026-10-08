@@ -108,6 +108,8 @@ export function showTurn(app, ctx, goto) {
     wrap.style.clipPath = '';
   }
 
+  applyClip(); // 이벤트 포함 턴 전체에 clip 적용
+
   // ── 2. 이벤트 ──
   const eventCtx = { pain, drive, budget, card, turnNum };
   const event = pickEvent(turnNum, eventSlots, eventCtx, usedEvents, rng);
@@ -181,7 +183,7 @@ export function showTurn(app, ctx, goto) {
     if (effects.drive !== undefined) drive = effects.drive;
     if (effects.budget !== undefined) budget = effects.budget;
     if (effects.rainNextTurn) rainNextTurn = true;
-    if (effects.viewOverride) currentView = effects.viewOverride;
+    if (effects.viewOverride) { currentView = effects.viewOverride; applyClip(); }
     if (effects.promoteWidest) deck.promoteWidest();
 
     // 이벤트 후 엔딩 체크
