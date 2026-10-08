@@ -176,6 +176,29 @@ html, body {
   font-weight: 600;
 }
 
+/* ── 이벤트 ── */
+
+.event-box {
+  text-align: center;
+  padding: 16px 20px;
+  background: #fff8e1;
+  border: 2px solid #f9a825;
+  border-radius: 10px;
+  max-width: 300px;
+}
+
+.event-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #e65100;
+  margin-bottom: 6px;
+}
+
+.event-desc {
+  font-size: 14px;
+  color: #555;
+}
+
 .choice-buttons {
   display: flex;
   gap: 12px;

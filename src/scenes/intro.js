@@ -9,7 +9,8 @@ import { createDeck } from '../deck.js';
 import {
   INITIAL_PAIN, INITIAL_DRIVE, INITIAL_BUDGET, MAX_TURNS,
 } from '../state.js';
-import { updateDebug } from '../debug.js';
+import { updateDebug, DEBUG } from '../debug.js';
+import { assignEventSlots } from '../events.js';
 
 export function showIntro(app, context, goto) {
   let locked = false;
@@ -34,8 +35,10 @@ export function showIntro(app, context, goto) {
 
       const rng = createRng(context.seed);
       const deck = createDeck(dest.id, rng);
+      const eventSlots = assignEventSlots(rng);
 
       updateDebug('여행지', dest.name);
+      if (DEBUG) updateDebug('이벤트', `유혹T${eventSlots.temptation} 부정T${eventSlots.negative} 긍정T${eventSlots.positive}`);
 
       goto(showTurn, {
         seed: context.seed,
@@ -47,7 +50,9 @@ export function showIntro(app, context, goto) {
         drive: INITIAL_DRIVE,
         budget: INITIAL_BUDGET,
         records: [],
-        eventSlots: null, // 5단계에서 구현
+        eventSlots,
+        usedEvents: new Set(),
+        rainNextTurn: false,
       });
     });
     btnWrap.appendChild(btn);

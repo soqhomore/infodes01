@@ -7,12 +7,13 @@ import {
   VIEW_BONUS, VIEW_CLIP, clampStat, applyRest, applySkip,
 } from '../state.js';
 import { updateDebug, DEBUG } from '../debug.js';
+import { pickEvent, downgradeView } from '../events.js';
 import { showEnding } from './ending.js';
 
-// ── 상수 (state.js에 없는 UI 전용 값) ──
+// ── 상수 (UI 전용) ──
 
-const SPACING_BLUR_START = 3000;  // 흐려지기 시작 (ms)
-const SPACING_TRIGGER = 6000;     // 멍때리기 실행 (ms)
+const SPACING_BLUR_START = 3000;
+const SPACING_TRIGGER = 6000;
 
 // ── 유틸 ──
 
@@ -69,37 +70,35 @@ export function showTurn(app, ctx, goto) {
     if (spacingRafId) cancelAnimationFrame(spacingRafId);
   }
 
-  const { rng, deck, turn, records } = ctx;
-  let { pain, drive, budget } = ctx;
+  const { rng, deck, turn, records, eventSlots, usedEvents } = ctx;
+  let { pain, drive, budget, rainNextTurn } = ctx;
   const turnNum = turn + 1;
 
   // ── 1. 이동 ──
   pain = clampStat(pain + MOVE_PAIN[turn]);
   const card = deck.draw();
 
-  updateDebug('턴', `${turnNum}/7`);
-  updateDebug('카드', `${card.name} (${card.view}, ${card.indoor ? '실내' : '실외'})`);
-
-  // ── 3. 엔딩 체크 ──
-  if (drive <= 0 || pain >= 100) {
-    cleanup();
-    goto(showEnding, { ...ctx, pain, drive, budget });
-    return cleanup;
+  // 비 효과: 이전 턴에서 비가 왔으면 시야 한 단계 하락
+  if (rainNextTurn) {
+    card.view = downgradeView(card.view);
+    rainNextTurn = false;
   }
 
-  // ── 시야 clip-path ──
-  const clipPct = VIEW_CLIP[card.view];
-  const inset = (100 - clipPct) / 2; // 좌우 대칭
+  let currentView = card.view; // 이벤트로 변경될 수 있음
+
+  updateDebug('턴', `${turnNum}/7`);
+  updateDebug('카드', `${card.name} (${currentView}, ${card.indoor ? '실내' : '실외'})`);
 
   // ── 화면 ──
   const wrap = document.createElement('div');
   wrap.className = 'scene turn';
   app.appendChild(wrap);
 
-  // clip-path를 감싸는 컨테이너에 적용
   function applyClip() {
-    if (clipPct < 100) {
-      wrap.style.clipPath = `inset(0 ${inset}% 0 ${inset}%)`;
+    const pct = VIEW_CLIP[currentView];
+    if (pct < 100) {
+      const ins = (100 - pct) / 2;
+      wrap.style.clipPath = `inset(0 ${ins}% 0 ${ins}%)`;
     } else {
       wrap.style.clipPath = '';
     }
@@ -109,9 +108,102 @@ export function showTurn(app, ctx, goto) {
     wrap.style.clipPath = '';
   }
 
-  showCardReveal();
+  // ── 2. 이벤트 ──
+  const eventCtx = { pain, drive, budget, card, turnNum };
+  const event = pickEvent(turnNum, eventSlots, eventCtx, usedEvents, rng);
 
-  // ── 4. 카드 공개 + 5. 쉴까? ──
+  if (event) {
+    usedEvents.add(event.id);
+    if (DEBUG) updateDebug('이벤트', `${event.name}`);
+    showEvent(event);
+  } else {
+    afterEvent();
+  }
+
+  // ── 이벤트 표시 ──
+
+  function showEvent(evt) {
+    locked = false;
+    wrap.innerHTML = `
+      ${statsHTML(pain, drive, budget)}
+      <div class="event-box">
+        <div class="event-name">${evt.name}</div>
+        <div class="event-desc">${evt.describe()}</div>
+      </div>
+    `;
+
+    if (evt.hasChoice) {
+      const choices = evt.choices({ pain, drive, budget, card, turnNum });
+      const btnWrap = document.createElement('div');
+      btnWrap.className = 'choice-buttons';
+
+      choices.forEach((ch, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'btn' + (ch.disabled ? ' btn-locked' : '');
+        btn.textContent = ch.label;
+        if (ch.disabled) {
+          btn.disabled = true;
+          if (ch.disabledReason) {
+            const reason = document.createElement('span');
+            reason.className = 'lock-reason';
+            reason.textContent = ` (${ch.disabledReason})`;
+            btn.appendChild(reason);
+          }
+        }
+        addListener(btn, 'click', () => {
+          if (locked || ch.disabled) return;
+          locked = true;
+          applyEventEffect(evt, idx);
+        });
+        btnWrap.appendChild(btn);
+      });
+
+      wrap.appendChild(btnWrap);
+    } else {
+      // 선택 없음 — 자동 적용
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = '계속';
+      addListener(btn, 'click', () => {
+        if (locked) return;
+        locked = true;
+        applyEventEffect(evt, null);
+      });
+      wrap.appendChild(btn);
+    }
+  }
+
+  function applyEventEffect(evt, choiceIdx) {
+    const effectCtx = { pain, drive, budget, card, turnNum };
+    const effects = evt.apply(effectCtx, choiceIdx) || {};
+
+    if (effects.pain !== undefined) pain = effects.pain;
+    if (effects.drive !== undefined) drive = effects.drive;
+    if (effects.budget !== undefined) budget = effects.budget;
+    if (effects.rainNextTurn) rainNextTurn = true;
+    if (effects.viewOverride) currentView = effects.viewOverride;
+    if (effects.promoteWidest) deck.promoteWidest();
+
+    // 이벤트 후 엔딩 체크
+    if (drive <= 0 || pain >= 100) {
+      cleanup();
+      goto(showEnding, { ...ctx, pain, drive, budget, records, rainNextTurn, turn });
+      return;
+    }
+
+    afterEvent();
+  }
+
+  // ── 3. 엔딩 체크 + 4. 카드 공개 ──
+
+  function afterEvent() {
+    if (drive <= 0 || pain >= 100) {
+      cleanup();
+      goto(showEnding, { ...ctx, pain, drive, budget, records, rainNextTurn, turn });
+      return;
+    }
+    showCardReveal();
+  }
 
   function showCardReveal() {
     locked = false;
@@ -122,7 +214,7 @@ export function showTurn(app, ctx, goto) {
         <div class="turn-number">턴 ${turnNum} / 7</div>
         <div class="card-reveal">
           <div class="card-name">${card.name}</div>
-          <div class="card-detail">${card.indoor ? '실내' : '실외'} · 시야 ${card.view}</div>
+          <div class="card-detail">${card.indoor ? '실내' : '실외'} · 시야 ${currentView}</div>
         </div>
       </div>
     `;
@@ -172,7 +264,7 @@ export function showTurn(app, ctx, goto) {
     const result = applySkip({ pain, drive });
 
     records.push({
-      turn: turnNum, skipped: true, card,
+      turn: turnNum, skipped: true, card: { ...card, view: currentView },
       action: null, spend: 0,
       painBefore: pain, painAfter: result.painAfter, painRecovered: 0,
       driveBefore: drive, driveAfter: result.driveAfter,
@@ -188,6 +280,9 @@ export function showTurn(app, ctx, goto) {
 
   function showActionSelect() {
     locked = false;
+
+    // 행동 판정용 카드 — 이벤트로 변경된 시야 사용
+    const actionCard = { ...card, view: currentView };
 
     wrap.innerHTML = `
       ${statsHTML(pain, drive, budget)}
@@ -208,27 +303,24 @@ export function showTurn(app, ctx, goto) {
     const wanderZone = wrap.querySelector('.wander-zone');
     const spacingOverlay = wrap.querySelector('.spacing-overlay');
 
-    // 멍때리기는 버튼으로 고를 수 없음 — 타이머로만 발동
     const buttonActions = ['phone', 'dessert', 'meal', 'chat', 'plan', 'wander'];
-
-    const canWander = ACTIONS.wander.condition(pain, budget, card.indoor);
+    const canWander = ACTIONS.wander.condition(pain, budget, actionCard.indoor);
 
     for (const id of buttonActions) {
       if (id === 'wander') {
-        // 돌아다니기는 드래그 영역으로 분리
-        setupWander(wanderZone, canWander);
+        setupWander(wanderZone, canWander, actionCard);
         continue;
       }
 
       const action = ACTIONS[id];
-      const canUse = action.condition(pain, budget, card.indoor);
+      const canUse = action.condition(pain, budget, actionCard.indoor);
 
       const btn = document.createElement('button');
       btn.className = 'btn btn-action' + (canUse ? '' : ' btn-locked');
       btn.innerHTML = `<span class="action-name">${action.name}</span>`;
 
       if (!canUse) {
-        btn.innerHTML += `<span class="lock-reason">${getLockReason(id, pain, budget, card.indoor)}</span>`;
+        btn.innerHTML += `<span class="lock-reason">${getLockReason(id, pain, budget, actionCard.indoor)}</span>`;
         btn.disabled = true;
       }
 
@@ -260,18 +352,15 @@ export function showTurn(app, ctx, goto) {
       resetSpacingTimer();
     }
 
-    // 입력 감지: 포인터, 터치, 키
     addListener(document, 'pointermove', onActivity);
     addListener(document, 'pointerdown', onActivity);
     addListener(document, 'keydown', onActivity);
 
-    // 매 프레임 흐림 체크
     function spacingTick() {
       if (locked) return;
       const elapsed = Date.now() - spacingStart;
 
       if (elapsed >= SPACING_TRIGGER) {
-        // 멍때리기 발동
         locked = true;
         wrap.style.filter = '';
         spacingOverlay.style.display = 'flex';
@@ -281,7 +370,7 @@ export function showTurn(app, ctx, goto) {
 
       if (elapsed >= SPACING_BLUR_START) {
         const progress = (elapsed - SPACING_BLUR_START) / (SPACING_TRIGGER - SPACING_BLUR_START);
-        const blur = progress * 4; // 최대 4px blur
+        const blur = progress * 4;
         wrap.style.filter = `blur(${blur.toFixed(1)}px)`;
       }
 
@@ -302,17 +391,14 @@ export function showTurn(app, ctx, goto) {
 
   // ── 돌아다니기 드래그 ──
 
-  function setupWander(zone, canUse) {
+  function setupWander(zone, canUse, actionCard) {
     zone.style.display = 'block';
 
     if (!canUse) {
-      const reason = ACTIONS.wander.condition(pain, budget, true)
-        ? '실내라 돌아다닐 수 없다'
-        : (pain >= 65 ? '발이 너무 아프다' : '실내라 돌아다닐 수 없다');
       zone.innerHTML = `
         <div class="wander-locked">
           <span class="action-name">돌아다니기</span>
-          <span class="lock-reason">${getLockReason('wander', pain, budget, card.indoor)}</span>
+          <span class="lock-reason">${getLockReason('wander', pain, budget, actionCard.indoor)}</span>
         </div>
       `;
       return;
@@ -355,7 +441,6 @@ export function showTurn(app, ctx, goto) {
       fishX = Math.max(0, Math.min(maxX, e.clientX - startX));
       fish.style.transform = `translateX(${fishX}px)`;
 
-      // 끝까지 도달하면 실행
       if (fishX >= maxX - 4) {
         dragging = false;
         locked = true;
@@ -366,7 +451,6 @@ export function showTurn(app, ctx, goto) {
     function onPointerUp() {
       if (!dragging) return;
       dragging = false;
-      // 스냅백
       fishX = 0;
       fish.style.transform = 'translateX(0)';
     }
@@ -379,12 +463,14 @@ export function showTurn(app, ctx, goto) {
   // ── 행동 실행 ──
 
   function doAction(actionId) {
-    const result = applyRest({ pain, drive, budget, actionId, card, rng: ctx.rng });
+    // 이벤트로 변경된 시야를 사용
+    const actionCard = { ...card, view: currentView };
+    const result = applyRest({ pain, drive, budget, actionId, card: actionCard, rng: ctx.rng });
 
     if (DEBUG) updateDebug('만족감', result.satisfaction);
 
     records.push({
-      turn: turnNum, skipped: false, card,
+      turn: turnNum, skipped: false, card: actionCard,
       action: actionId, spend: result.spend,
       painBefore: pain, painAfter: result.painAfter,
       painRecovered: result.painRecovered,
@@ -438,7 +524,7 @@ export function showTurn(app, ctx, goto) {
         if (locked) return;
         locked = true;
         cleanup();
-        goto(showEnding, { ...ctx, pain, drive, budget, records, turn: turn + 1 });
+        goto(showEnding, { ...ctx, pain, drive, budget, records, rainNextTurn, turn: turn + 1 });
       });
       wrap.appendChild(btn);
       return;
@@ -454,7 +540,7 @@ export function showTurn(app, ctx, goto) {
         if (locked) return;
         locked = true;
         cleanup();
-        goto(showEnding, { ...ctx, pain, drive, budget, records, turn: nextTurn });
+        goto(showEnding, { ...ctx, pain, drive, budget, records, rainNextTurn, turn: nextTurn });
       });
     } else {
       btn.textContent = '다음';
@@ -462,7 +548,7 @@ export function showTurn(app, ctx, goto) {
         if (locked) return;
         locked = true;
         cleanup();
-        goto(showTurn, { ...ctx, pain, drive, budget, records, turn: nextTurn });
+        goto(showTurn, { ...ctx, pain, drive, budget, records, rainNextTurn, turn: nextTurn });
       });
     }
     wrap.appendChild(btn);
