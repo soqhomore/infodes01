@@ -16,7 +16,7 @@ export const EVENTS = {
     slot: 'temptation',
     condition: () => true,
     hasChoice: true,
-    describe: () => '이 가게 한정 디저트를 발견했다!',
+    describe: () => '근처 가게에서 한정 디저트를 발견했다!',
     choices: (ctx) => {
       const canBuy = ctx.budget >= 2500;
       return [
@@ -91,7 +91,7 @@ export const EVENTS = {
     slot: 'positive',
     condition: (ctx) => ctx.pain >= 50,
     hasChoice: false,
-    describe: () => '좋은 벤치를 발견했다.',
+    describe: () => '그늘진 자리를 발견했다.',
     apply: (ctx) => ({ pain: clampStat(ctx.pain - 8) }),
   },
 };
