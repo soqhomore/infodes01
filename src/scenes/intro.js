@@ -53,6 +53,7 @@ export function showIntro(app, context, goto) {
         eventSlots,
         usedEvents: new Set(),
         rainNextTurn: false,
+        mealRecords: [],
       });
     });
     btnWrap.appendChild(btn);

@@ -55,10 +55,16 @@ export const ACTIONS = {
   spacing:  { name: '멍때리기',   initiative: 1, recovery: 14, spendRange: null,        condition: () => true },
   phone:    { name: '스마트폰',   initiative: 0, recovery: 12, spendRange: null,        condition: () => true },
   dessert:  { name: '디저트',     initiative: 2, recovery: 9,  spendRange: [600, 1200], condition: (pain, budget) => budget >= 1200 },
-  meal:     { name: '식사',       initiative: 3, recovery: 11, spendRange: [900, 1800], condition: (pain, budget) => budget >= 1800 },
   chat:     { name: '잡담',       initiative: 4, recovery: 10, spendRange: null,        condition: (pain) => pain < 85 },
   plan:     { name: '계획 짜기',  initiative: 6, recovery: 5,  spendRange: null,        condition: (pain) => pain < 80 },
   wander:   { name: '돌아다니기', initiative: 7, recovery: 3,  spendRange: null,        condition: (pain, _budget, indoor) => pain < 65 && !indoor },
+};
+
+// ── 4턴 고정 식사 (휴식/만족감 계산과 분리) ──
+export const MEAL_TURN = 4;
+export const MEAL_OPTIONS = {
+  bench: { name: '바깥 벤치에서 간단히 먹기', spend: 800 },
+  indoor: { name: '실내 자리에서 천천히 먹기', spend: 1800 },
 };
 
 // ── 통증 80 이상이면 지나치기 불가 ──
@@ -99,8 +105,19 @@ export function rollSpend(rng, spendRange) {
 }
 
 /**
+ * 4턴 고정 식사. 생활 필요를 해결할 뿐 휴식 수치에는 관여하지 않는다.
+ * @returns {{ budgetAfter: number, spend: number, option: string }}
+ */
+export function applyMeal({ budget, option }) {
+  const meal = MEAL_OPTIONS[option];
+  if (!meal) throw new Error(`알 수 없는 식사 선택: ${option}`);
+  if (budget < meal.spend) throw new Error('식사 예산이 부족하다');
+  return { budgetAfter: budget - meal.spend, spend: meal.spend, option };
+}
+
+/**
  * 휴식 실행 — 순수 함수
- * @returns {{ painAfter, driveAfter, budgetAfter, painRecovered, driveDelta, spend, satisfaction }}
+ * @returns {{ painAfter, driveAfter, budgetAfter, painRecovered, driveDelta, spend, satisfaction, efficiency, viewBonus, painPenalty, moneyBonus }}
  */
 export function applyRest({ pain, drive, budget, actionId, card, rng }) {
   const action = ACTIONS[actionId];
@@ -133,6 +150,10 @@ export function applyRest({ pain, drive, budget, actionId, card, rng }) {
     driveDelta,
     spend,
     satisfaction,
+    efficiency,
+    viewBonus,
+    painPenalty,
+    moneyBonus,
   };
 }
 

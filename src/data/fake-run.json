@@ -59,7 +59,7 @@
     "turn": 5,
     "skipped": false,
     "card": { "id": "beach-01", "name": "기념품점", "view": "narrow", "indoor": true },
-    "action": "meal",
+    "action": "dessert",
     "spend": 1200,
     "painBefore": 59,
     "painAfter": 51,

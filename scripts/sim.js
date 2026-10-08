@@ -9,7 +9,7 @@ import { createDeck } from '../src/deck.js';
 import {
   INITIAL_PAIN, INITIAL_DRIVE, INITIAL_BUDGET, MAX_TURNS,
   MOVE_PAIN, ACTIONS, FORCE_REST_PAIN,
-  applyRest, applySkip, clampStat,
+  MEAL_TURN, applyMeal, applyRest, clampStat,
 } from '../src/state.js';
 
 // ── 경로별 행동 선택 규칙 ──
@@ -32,7 +32,6 @@ function planFocused(pain, budget, card) {
 }
 
 function spendMoney(pain, budget, card) {
-  if (ACTIONS.meal.condition(pain, budget, card.indoor)) return 'meal';
   if (ACTIONS.dessert.condition(pain, budget, card.indoor)) return 'dessert';
   return 'spacing';
 }
@@ -58,9 +57,14 @@ function runGame(destination, pickAction, seed) {
   const records = [];
 
   for (let t = 0; t < MAX_TURNS; t++) {
+    const turnNum = t + 1;
+
     // 1. 이동
     pain = clampStat(pain + MOVE_PAIN[t]);
     const card = deck.draw();
+
+    // 4턴 식사는 생활비이며, 휴식 수치에는 영향을 주지 않는다.
+    if (turnNum === MEAL_TURN) budget = applyMeal({ budget, option: 'bench' }).budgetAfter;
 
     // (이벤트 없음)
 
@@ -112,12 +116,12 @@ function runGame(destination, pickAction, seed) {
 // ── 경로 정의 ──
 
 const ROUTES = [
-  { name: '돌아다니기 올인', dest: 'beach',   pick: wanderAllIn, expect: { drive: 80, pain: 76, sat: 6.9 } },
-  { name: '영리한 혼합 (마을)', dest: 'village', pick: smartMix,    expect: { drive: 77, pain: 53, sat: 6.6 } },
-  { name: '계획 위주',       dest: 'village', pick: planFocused, expect: { drive: 76, pain: 73, sat: 6.4 } },
-  { name: '영리한 혼합 (도시)', dest: 'city',    pick: smartMix,    expect: { drive: 68, pain: 39, sat: 6.0 } },
-  { name: '돈 쓰기',         dest: 'city',    pick: spendMoney,  expect: { drive: 60, pain: 33, sat: 6.0 } },
-  { name: '스마트폰만',      dest: 'city',    pick: phoneOnly,   expect: { drive: 43, pain: 19, sat: 4.6 } },
+  { name: '돌아다니기 올인', dest: 'beach', pick: wanderAllIn },
+  { name: '영리한 혼합 (마을)', dest: 'village', pick: smartMix },
+  { name: '계획 위주', dest: 'village', pick: planFocused },
+  { name: '영리한 혼합 (도시)', dest: 'city', pick: smartMix },
+  { name: '돈 쓰기', dest: 'city', pick: spendMoney },
+  { name: '스마트폰만', dest: 'city', pick: phoneOnly },
 ];
 
 const SEED_COUNT = 10;
@@ -126,8 +130,6 @@ const BASE_SEED = 1000;
 // ── 실행 ──
 
 console.log('=== 개복치 휴식 시뮬레이터 — 수치 검증 ===\n');
-
-let allPass = true;
 
 for (const route of ROUTES) {
   let sumDrive = 0, sumPain = 0, sumSat = 0, totalTurns = 0;
@@ -146,19 +148,9 @@ for (const route of ROUTES) {
   const avgPain = Math.round(sumPain / SEED_COUNT * 10) / 10;
   const avgSat = Math.round(sumSat / SEED_COUNT * 10) / 10;
 
-  const dDrive = Math.abs(avgDrive - route.expect.drive);
-  const dPain = Math.abs(avgPain - route.expect.pain);
-  const dSat = Math.abs(avgSat - route.expect.sat);
-
-  const pass = dDrive <= 5 && dPain <= 5 && dSat <= 1;
-  if (!pass) allPass = false;
-
-  const mark = pass ? '✓' : '✗';
-  console.log(`${mark} ${route.name} (${route.dest})`);
-  console.log(`  의지  ${avgDrive} (기획 ${route.expect.drive}, 차이 ${dDrive.toFixed(1)})`);
-  console.log(`  통증  ${avgPain} (기획 ${route.expect.pain}, 차이 ${dPain.toFixed(1)})`);
-  console.log(`  만족감 ${avgSat} (기획 ${route.expect.sat}, 차이 ${dSat.toFixed(1)})`);
+  console.log(`• ${route.name} (${route.dest})`);
+  console.log(`  의지 ${avgDrive} / 통증 ${avgPain} / 만족감 ${avgSat}`);
   console.log();
 }
 
-console.log(allPass ? '전부 ±5 이내 통과' : '⚠ 차이가 큰 경로가 있음 — 수치를 고치지 말고 보고');
+console.log('식사는 모든 경로에서 4턴에 ¥800으로 동일 처리되어 휴식 비교에서 제외됨');

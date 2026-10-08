@@ -1,574 +1,162 @@
-/**
- * 턴 씬 — §4 한 턴의 순서를 그대로 따른다.
- */
-
+/** 한 턴: 이동 압박 → 장소 공개 → 사건/식사 → 결정 → 행동 → 결과 */
 import {
-  MOVE_PAIN, ACTIONS, FORCE_REST_PAIN, MAX_TURNS,
-  VIEW_BONUS, VIEW_CLIP, clampStat, applyRest, applySkip,
+  MOVE_PAIN, ACTIONS, FORCE_REST_PAIN, MAX_TURNS, MEAL_TURN, MEAL_OPTIONS,
+  VIEW_CLIP, clampStat, applyMeal, applyRest, applySkip,
 } from '../state.js';
 import { updateDebug, DEBUG } from '../debug.js';
 import { pickEvent, downgradeView } from '../events.js';
 import { showEnding } from './ending.js';
 
-// ── 상수 (UI 전용) ──
-
 const SPACING_BLUR_START = 3000;
 const SPACING_TRIGGER = 6000;
+const AUTO_NEXT_MS = 1250;
+const formatBudget = value => `¥${value.toLocaleString()}`;
+const signed = value => `${value >= 0 ? '+' : ''}${value}`;
 
-// ── 유틸 ──
-
-function formatBudget(n) {
-  return '¥' + n.toLocaleString();
+function statsHTML(pain, drive, budget, changes = {}) {
+  const delta = (key, tone) => changes[key] === undefined ? '' : `<span class="stat-delta ${tone}">${signed(changes[key])}</span>`;
+  return `<div class="stats">
+    <div class="stat"><span class="stat-label">통증</span><div class="stat-bar"><div class="stat-fill pain-fill" style="width:${pain}%"></div></div><span class="stat-value">${pain}</span>${delta('pain', 'delta-pain')}</div>
+    <div class="stat"><span class="stat-label">의지</span><div class="stat-bar"><div class="stat-fill drive-fill" style="width:${drive}%"></div></div><span class="stat-value">${drive}</span>${delta('drive', 'delta-drive')}</div>
+    <div class="stat-budget">${formatBudget(budget)}${changes.budget ? ` <span class="stat-delta delta-budget">${changes.budget < 0 ? '−' : '+'}${formatBudget(Math.abs(changes.budget))}</span>` : ''}</div>
+  </div>`;
 }
 
-function statsHTML(pain, drive, budget) {
-  return `
-    <div class="stats">
-      <div class="stat">
-        <span class="stat-label">통증</span>
-        <div class="stat-bar"><div class="stat-fill pain-fill" style="width:${pain}%"></div></div>
-        <span class="stat-value">${pain}</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">의지</span>
-        <div class="stat-bar"><div class="stat-fill drive-fill" style="width:${drive}%"></div></div>
-        <span class="stat-value">${drive}</span>
-      </div>
-      <div class="stat-budget">${formatBudget(budget)}</div>
-    </div>
-  `;
+function fishSVG(className = 'place-fish') {
+  return `<svg class="${className}" viewBox="0 0 72 48" aria-hidden="true"><ellipse cx="38" cy="24" rx="23" ry="16" fill="#5ba3d9"/><path d="M17 24 3 10v28z" fill="#3a7cbd"/><circle cx="45" cy="19" r="3" fill="#fff"/><circle cx="46" cy="19" r="1.4" fill="#222"/></svg>`;
 }
-
-// ── 턴 메인 ──
 
 export function showTurn(app, ctx, goto) {
   let locked = false;
-  const timers = [];
-  const intervals = [];
-  const listeners = [];
   let spacingRafId = null;
-
-  function addTimer(fn, ms) {
-    const id = setTimeout(fn, ms);
-    timers.push(id);
-    return id;
-  }
-  function addInterval(fn, ms) {
-    const id = setInterval(fn, ms);
-    intervals.push(id);
-    return id;
-  }
-  function addListener(el, evt, fn, opts) {
-    el.addEventListener(evt, fn, opts);
-    listeners.push({ el, evt, fn, opts });
-  }
-
-  function cleanup() {
-    timers.forEach(id => clearTimeout(id));
-    intervals.forEach(id => clearInterval(id));
-    listeners.forEach(({ el, evt, fn, opts }) => el.removeEventListener(evt, fn, opts));
-    if (spacingRafId) cancelAnimationFrame(spacingRafId);
-  }
-
+  const timers = [];
+  const listeners = [];
   const { rng, deck, turn, records, eventSlots, usedEvents } = ctx;
   let { pain, drive, budget, rainNextTurn } = ctx;
+  const mealRecords = ctx.mealRecords || [];
   const turnNum = turn + 1;
-
-  // ── 1. 이동 ──
-  pain = clampStat(pain + MOVE_PAIN[turn]);
   const card = deck.draw();
+  const painBeforeMove = pain;
+  pain = clampStat(pain + MOVE_PAIN[turn]);
+  if (rainNextTurn) { card.view = downgradeView(card.view); rainNextTurn = false; }
+  let currentView = card.view;
 
-  // 비 효과: 이전 턴에서 비가 왔으면 시야 한 단계 하락
-  if (rainNextTurn) {
-    card.view = downgradeView(card.view);
-    rainNextTurn = false;
-  }
+  const wrap = document.createElement('div'); wrap.className = 'scene turn'; app.appendChild(wrap);
+  const addTimer = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); return id; };
+  const addListener = (el, type, fn, opts) => { el.addEventListener(type, fn, opts); listeners.push({ el, type, fn, opts }); };
+  const cleanup = () => { timers.forEach(clearTimeout); listeners.forEach(({ el, type, fn, opts }) => el.removeEventListener(type, fn, opts)); if (spacingRafId) cancelAnimationFrame(spacingRafId); };
+  const actionCard = () => ({ ...card, view: currentView });
+  const isOver = () => drive <= 0 || pain >= 100;
+  const leave = (scene, nextTurn = turn) => { cleanup(); goto(scene, { ...ctx, pain, drive, budget, records, mealRecords, rainNextTurn, turn: nextTurn }); };
+  const placeHTML = () => `<div class="place-stage view-${currentView}"><div class="place-density density-${currentView}"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="place-window" style="--view-width:${VIEW_CLIP[currentView]}%"><div class="place-landscape">${fishSVG()}<span class="place-horizon"></span></div></div><div class="place-caption"><strong>${card.name}</strong><span>${card.indoor ? '실내' : '실외'} · ${currentView === 'wide' ? '열린 시야' : currentView === 'mid' ? '중간 시야' : '좁은 시야'}</span></div></div>`;
+  const render = (body, changes = {}) => { wrap.innerHTML = `${statsHTML(pain, drive, budget, changes)}${placeHTML()}${body}`; };
 
-  let currentView = card.view; // 이벤트로 변경될 수 있음
+  updateDebug('턴', `${turnNum}/${MAX_TURNS}`); updateDebug('카드', `${card.name} (${currentView})`);
 
-  updateDebug('턴', `${turnNum}/7`);
-  updateDebug('카드', `${card.name} (${currentView}, ${card.indoor ? '실내' : '실외'})`);
-
-  // ── 화면 ──
-  const wrap = document.createElement('div');
-  wrap.className = 'scene turn';
-  app.appendChild(wrap);
-
-  function applyClip() {
-    const pct = VIEW_CLIP[currentView];
-    if (pct < 100) {
-      const ins = (100 - pct) / 2;
-      wrap.style.clipPath = `inset(0 ${ins}% 0 ${ins}%)`;
-    } else {
-      wrap.style.clipPath = '';
-    }
-  }
-
-  function removeClip() {
-    wrap.style.clipPath = '';
-  }
-
-  applyClip(); // 이벤트 포함 턴 전체에 clip 적용
-
-  // ── 2. 이벤트 ──
-  const eventCtx = { pain, drive, budget, card, turnNum };
-  const event = pickEvent(turnNum, eventSlots, eventCtx, usedEvents, rng);
-
-  if (event) {
-    usedEvents.add(event.id);
-    if (DEBUG) updateDebug('이벤트', `${event.name}`);
-    showEvent(event);
-  } else {
-    afterEvent();
-  }
-
-  // ── 이벤트 표시 ──
-
-  function showEvent(evt) {
+  function showPlace() {
     locked = false;
-    wrap.innerHTML = `
-      ${statsHTML(pain, drive, budget)}
-      <div class="event-box">
-        <div class="event-name">${evt.name}</div>
-        <div class="event-desc">${evt.describe()}</div>
-      </div>
-    `;
-
-    if (evt.hasChoice) {
-      const choices = evt.choices({ pain, drive, budget, card, turnNum });
-      const btnWrap = document.createElement('div');
-      btnWrap.className = 'choice-buttons';
-
-      choices.forEach((ch, idx) => {
-        const btn = document.createElement('button');
-        btn.className = 'btn' + (ch.disabled ? ' btn-locked' : '');
-        btn.textContent = ch.label;
-        if (ch.disabled) {
-          btn.disabled = true;
-          if (ch.disabledReason) {
-            const reason = document.createElement('span');
-            reason.className = 'lock-reason';
-            reason.textContent = ` (${ch.disabledReason})`;
-            btn.appendChild(reason);
-          }
-        }
-        addListener(btn, 'click', () => {
-          if (locked || ch.disabled) return;
-          locked = true;
-          applyEventEffect(evt, idx);
-        });
-        btnWrap.appendChild(btn);
-      });
-
-      wrap.appendChild(btnWrap);
-    } else {
-      // 선택 없음 — 자동 적용
-      const btn = document.createElement('button');
-      btn.className = 'btn';
-      btn.textContent = '계속';
-      addListener(btn, 'click', () => {
-        if (locked) return;
-        locked = true;
-        applyEventEffect(evt, null);
-      });
-      wrap.appendChild(btn);
-    }
+    render(`<div class="turn-info"><div class="turn-number">턴 ${turnNum} / ${MAX_TURNS}</div><p class="pressure-copy">이동했다. 몸이 먼저 반응한다.</p></div><div class="change-strip">통증 ${painBeforeMove} → ${pain} <b class="delta-pain">(+${pain - painBeforeMove})</b></div>`, { pain: pain - painBeforeMove });
+    addTimer(proceedContext, 900);
   }
 
-  function applyEventEffect(evt, choiceIdx) {
-    const effectCtx = { pain, drive, budget, card, turnNum };
-    const effects = evt.apply(effectCtx, choiceIdx) || {};
-
-    if (effects.pain !== undefined) pain = effects.pain;
-    if (effects.drive !== undefined) drive = effects.drive;
-    if (effects.budget !== undefined) budget = effects.budget;
-    if (effects.rainNextTurn) rainNextTurn = true;
-    if (effects.viewOverride) { currentView = effects.viewOverride; applyClip(); }
-    if (effects.promoteWidest) deck.promoteWidest();
-
-    // 이벤트 후 엔딩 체크
-    if (drive <= 0 || pain >= 100) {
-      cleanup();
-      goto(showEnding, { ...ctx, pain, drive, budget, records, rainNextTurn, turn });
-      return;
-    }
-
-    afterEvent();
+  function proceedContext() {
+    if (isOver()) return leave(showEnding);
+    const event = pickEvent(turnNum, eventSlots, { pain, drive, budget, card, turnNum }, usedEvents, rng);
+    if (event) { usedEvents.add(event.id); if (DEBUG) updateDebug('이벤트', event.name); return showEvent(event); }
+    if (turnNum === MEAL_TURN) return showMeal();
+    showDecision();
   }
 
-  // ── 3. 엔딩 체크 + 4. 카드 공개 ──
-
-  function afterEvent() {
-    if (drive <= 0 || pain >= 100) {
-      cleanup();
-      goto(showEnding, { ...ctx, pain, drive, budget, records, rainNextTurn, turn });
-      return;
-    }
-    showCardReveal();
+  function showEvent(event) {
+    locked = false; render(`<div class="event-box"><div class="event-name">${event.name}</div><div class="event-desc">${event.describe()}</div></div>`);
+    const choices = event.hasChoice ? event.choices({ pain, drive, budget, card, turnNum }) : [{ label: '그대로 받아들인다' }];
+    const buttons = document.createElement('div'); buttons.className = 'choice-buttons';
+    choices.forEach((choice, index) => {
+      const button = document.createElement('button'); button.className = `btn${choice.disabled ? ' btn-locked' : ''}`; button.disabled = Boolean(choice.disabled); button.textContent = choice.disabledReason ? `${choice.label} · ${choice.disabledReason}` : choice.label;
+      addListener(button, 'click', () => { if (!locked && !choice.disabled) { locked = true; applyEvent(event, event.hasChoice ? index : null); } }); buttons.appendChild(button);
+    }); wrap.appendChild(buttons);
   }
 
-  function showCardReveal() {
-    locked = false;
-    applyClip();
-    wrap.innerHTML = `
-      ${statsHTML(pain, drive, budget)}
-      <div class="turn-info">
-        <div class="turn-number">턴 ${turnNum} / 7</div>
-        <div class="card-reveal">
-          <div class="card-name">${card.name}</div>
-          <div class="card-detail">${card.indoor ? '실내' : '실외'} · 시야 ${currentView}</div>
-        </div>
-      </div>
-    `;
-
-    if (pain >= FORCE_REST_PAIN) {
-      wrap.innerHTML += `<div class="force-rest">몸이 대신 정했다.</div>`;
-      const btn = document.createElement('button');
-      btn.className = 'btn';
-      btn.textContent = '쉰다';
-      addListener(btn, 'click', () => {
-        if (locked) return;
-        locked = true;
-        showActionSelect();
-      });
-      wrap.appendChild(btn);
-    } else {
-      const btnWrap = document.createElement('div');
-      btnWrap.className = 'choice-buttons';
-
-      const btnSkip = document.createElement('button');
-      btnSkip.className = 'btn btn-skip';
-      btnSkip.textContent = '지나친다';
-      addListener(btnSkip, 'click', () => {
-        if (locked) return;
-        locked = true;
-        doSkip();
-      });
-
-      const btnRest = document.createElement('button');
-      btnRest.className = 'btn btn-rest';
-      btnRest.textContent = '쉰다';
-      addListener(btnRest, 'click', () => {
-        if (locked) return;
-        locked = true;
-        showActionSelect();
-      });
-
-      btnWrap.appendChild(btnSkip);
-      btnWrap.appendChild(btnRest);
-      wrap.appendChild(btnWrap);
-    }
+  function applyEvent(event, choiceIndex) {
+    const before = { pain, drive, budget }; const effect = event.apply({ pain, drive, budget, card, turnNum }, choiceIndex) || {};
+    if (effect.pain !== undefined) pain = effect.pain; if (effect.drive !== undefined) drive = effect.drive; if (effect.budget !== undefined) budget = effect.budget;
+    if (effect.rainNextTurn) rainNextTurn = true; if (effect.viewOverride) currentView = effect.viewOverride; if (effect.promoteWidest) deck.promoteWidest();
+    const changes = { pain: pain - before.pain, drive: drive - before.drive, budget: budget - before.budget };
+    render(`<div class="outcome-panel"><strong>${event.name}</strong><p>통증 ${signed(changes.pain)} / 의지 ${signed(changes.drive)}${changes.budget ? ` / 예산 ${changes.budget < 0 ? '−' : '+'}${formatBudget(Math.abs(changes.budget))}` : ''}</p></div>`, changes);
+    addTimer(() => isOver() ? leave(showEnding) : (turnNum === MEAL_TURN ? showMeal() : showDecision()), AUTO_NEXT_MS);
   }
 
-  // ── 지나치기 ──
+  function showMeal() {
+    locked = false; render('<div class="meal-panel"><div class="event-name">식사 시간</div><p>허기는 여기서 해결한다. 이후의 쉼은 별도로 남는다.</p></div>');
+    const choices = document.createElement('div'); choices.className = 'meal-choices';
+    Object.entries(MEAL_OPTIONS).forEach(([id, meal]) => {
+      const button = document.createElement('button'); button.className = 'btn btn-meal'; button.innerHTML = `<span>${formatBudget(meal.spend)}</span>${meal.name}`;
+      addListener(button, 'click', () => {
+        if (locked) return; locked = true; const result = applyMeal({ budget, option: id }); budget = result.budgetAfter;
+        mealRecords.push({ turn: turnNum, spend: result.spend, option: id, card: actionCard() });
+        render(`<div class="outcome-panel meal-outcome"><strong>${meal.name}</strong><p>예산 −${formatBudget(result.spend)} · 허기는 해결됨</p><small>통증·의지·만족감에는 직접 영향이 없다.</small></div>`, { budget: -result.spend }); addTimer(showDecision, AUTO_NEXT_MS);
+      }); choices.appendChild(button);
+    }); wrap.appendChild(choices);
+  }
+
+  function showDecision() {
+    locked = false; render(`<div class="turn-info"><div class="turn-number">턴 ${turnNum} / ${MAX_TURNS}</div><p class="action-prompt">이 공간에서, 지금은 어떻게 쉴까?</p></div>`);
+    const choices = document.createElement('div'); choices.className = 'choice-buttons';
+    if (pain < FORCE_REST_PAIN) { const skip = document.createElement('button'); skip.className = 'btn btn-skip'; skip.textContent = '지나친다'; addListener(skip, 'click', () => { if (!locked) { locked = true; doSkip(); } }); choices.appendChild(skip); } else choices.innerHTML = '<div class="force-rest">몸이 대신 정했다.</div>';
+    const rest = document.createElement('button'); rest.className = 'btn btn-rest'; rest.textContent = '쉰다'; addListener(rest, 'click', () => { if (!locked) { locked = true; showActions(); } }); choices.appendChild(rest); wrap.appendChild(choices);
+  }
 
   function doSkip() {
-    const result = applySkip({ pain, drive });
+    const before = { pain, drive }; const result = applySkip({ pain, drive }); pain = result.painAfter; drive = result.driveAfter;
+    records.push({ turn: turnNum, skipped: true, card: actionCard(), action: null, spend: 0, painBefore: before.pain, painAfter: pain, painRecovered: 0, driveBefore: before.drive, driveAfter: drive, driveDelta: result.driveDelta, satisfaction: 0 });
+    showTurnOutcome('지나쳤다.', { pain: pain - before.pain, drive: drive - before.drive }, '통증이 더 쌓였고, 의지가 조금 줄었다.');
+  }
 
-    records.push({
-      turn: turnNum, skipped: true, card: { ...card, view: currentView },
-      action: null, spend: 0,
-      painBefore: pain, painAfter: result.painAfter, painRecovered: 0,
-      driveBefore: drive, driveAfter: result.driveAfter,
-      driveDelta: result.driveDelta, satisfaction: 0,
+  function showActions() {
+    locked = false; render('<div class="turn-info"><p class="action-prompt">몸을 쉬게 하는 방식도, 내가 고른다.</p></div><div class="action-area"><div class="action-buttons"></div><div class="interaction-area"></div></div>');
+    const buttons = wrap.querySelector('.action-buttons');
+    ['phone', 'dessert', 'chat', 'plan'].forEach(id => {
+      const action = ACTIONS[id]; const available = action.condition(pain, budget, actionCard().indoor); const button = document.createElement('button'); button.className = `btn btn-action${available ? '' : ' btn-locked'}`; button.disabled = !available;
+      button.innerHTML = `<span class="action-name">${action.name}</span>${action.spendRange ? `<span class="action-cost">${formatBudget(action.spendRange[0])}~${formatBudget(action.spendRange[1])}</span>` : ''}`;
+      addListener(button, 'click', () => { if (!locked && available) { locked = true; launchAction(id); } }); buttons.appendChild(button);
     });
-
-    pain = result.painAfter;
-    drive = result.driveAfter;
-    showTurnResult(null, result.driveDelta, true);
+    const interaction = wrap.querySelector('.interaction-area'); addWander(interaction); beginSpacing(interaction);
   }
 
-  // ── 6. 행동 선택 ──
-
-  function showActionSelect() {
-    locked = false;
-
-    // 행동 판정용 카드 — 이벤트로 변경된 시야 사용
-    const actionCard = { ...card, view: currentView };
-
-    wrap.innerHTML = `
-      ${statsHTML(pain, drive, budget)}
-      <div class="turn-info">
-        <div class="turn-number">턴 ${turnNum} / 7 — ${card.name}</div>
-        <p class="action-prompt">어떻게 쉴까?</p>
-      </div>
-      <div class="action-area">
-        <div class="action-buttons"></div>
-        <div class="wander-zone" style="display:none"></div>
-      </div>
-      <div class="spacing-overlay" style="display:none">
-        <div class="spacing-text">아무것도 안 했다. 개복치도.</div>
-      </div>
-    `;
-
-    const btnWrap = wrap.querySelector('.action-buttons');
-    const wanderZone = wrap.querySelector('.wander-zone');
-    const spacingOverlay = wrap.querySelector('.spacing-overlay');
-
-    const buttonActions = ['phone', 'dessert', 'meal', 'chat', 'plan', 'wander'];
-    const canWander = ACTIONS.wander.condition(pain, budget, actionCard.indoor);
-
-    for (const id of buttonActions) {
-      if (id === 'wander') {
-        setupWander(wanderZone, canWander, actionCard);
-        continue;
-      }
-
-      const action = ACTIONS[id];
-      const canUse = action.condition(pain, budget, actionCard.indoor);
-
-      const btn = document.createElement('button');
-      btn.className = 'btn btn-action' + (canUse ? '' : ' btn-locked');
-      btn.innerHTML = `<span class="action-name">${action.name}</span>`;
-
-      if (!canUse) {
-        btn.innerHTML += `<span class="lock-reason">${getLockReason(id, pain, budget, actionCard.indoor)}</span>`;
-        btn.disabled = true;
-      }
-
-      if (action.spendRange) {
-        btn.innerHTML += `<span class="action-cost">${formatBudget(action.spendRange[0])}~${formatBudget(action.spendRange[1])}</span>`;
-      }
-
-      addListener(btn, 'click', () => {
-        if (locked || !canUse) return;
-        locked = true;
-        stopSpacingTimer();
-        doAction(id);
-      });
-
-      btnWrap.appendChild(btn);
-    }
-
-    // ── 멍때리기 타이머 ──
-    let spacingStart = Date.now();
-
-    function resetSpacingTimer() {
-      spacingStart = Date.now();
-      wrap.style.filter = '';
-      spacingOverlay.style.display = 'none';
-    }
-
-    function onActivity() {
-      if (locked) return;
-      resetSpacingTimer();
-    }
-
-    addListener(document, 'pointermove', onActivity);
-    addListener(document, 'pointerdown', onActivity);
-    addListener(document, 'keydown', onActivity);
-
-    function spacingTick() {
-      if (locked) return;
-      const elapsed = Date.now() - spacingStart;
-
-      if (elapsed >= SPACING_TRIGGER) {
-        locked = true;
-        wrap.style.filter = '';
-        spacingOverlay.style.display = 'flex';
-        addTimer(() => doAction('spacing'), 800);
-        return;
-      }
-
-      if (elapsed >= SPACING_BLUR_START) {
-        const progress = (elapsed - SPACING_BLUR_START) / (SPACING_TRIGGER - SPACING_BLUR_START);
-        const blur = progress * 4;
-        wrap.style.filter = `blur(${blur.toFixed(1)}px)`;
-      }
-
-      spacingRafId = requestAnimationFrame(spacingTick);
-    }
-
-    spacingRafId = requestAnimationFrame(spacingTick);
-
-    function stopSpacingTimer() {
-      if (spacingRafId) {
-        cancelAnimationFrame(spacingRafId);
-        spacingRafId = null;
-      }
-      wrap.style.filter = '';
-      spacingOverlay.style.display = 'none';
-    }
+  function beginSpacing(area) {
+    let start = Date.now(); const reset = () => { start = Date.now(); wrap.classList.remove('spacing-blur'); };
+    ['pointermove', 'pointerdown', 'keydown'].forEach(type => addListener(document, type, reset));
+    const tick = () => { if (locked) return; const elapsed = Date.now() - start; if (elapsed >= SPACING_TRIGGER) { locked = true; wrap.classList.remove('spacing-blur'); return doAction('spacing'); } if (elapsed >= SPACING_BLUR_START) wrap.classList.add('spacing-blur'); spacingRafId = requestAnimationFrame(tick); };
+    spacingRafId = requestAnimationFrame(tick); area.insertAdjacentHTML('beforeend', '<p class="spacing-hint">아무 입력 없이 잠시 머물러도 된다.</p>');
   }
 
-  // ── 돌아다니기 드래그 ──
-
-  function setupWander(zone, canUse, actionCard) {
-    zone.style.display = 'block';
-
-    if (!canUse) {
-      zone.innerHTML = `
-        <div class="wander-locked">
-          <span class="action-name">돌아다니기</span>
-          <span class="lock-reason">${getLockReason('wander', pain, budget, actionCard.indoor)}</span>
-        </div>
-      `;
-      return;
-    }
-
-    zone.innerHTML = `
-      <div class="wander-track">
-        <div class="wander-label">돌아다니기 — 개복치를 끝까지 끌어라</div>
-        <div class="wander-rail">
-          <svg class="wander-fish" width="36" height="36" viewBox="0 0 36 36"
-               style="touch-action:none; user-select:none;" draggable="false">
-            <circle cx="18" cy="18" r="16" fill="#5ba3d9" stroke="#3a7cbd" stroke-width="2"/>
-            <circle cx="12" cy="14" r="2.5" fill="#fff"/>
-            <circle cx="12" cy="14" r="1.2" fill="#222"/>
-          </svg>
-          <div class="wander-goal">→</div>
-        </div>
-      </div>
-    `;
-
-    const rail = zone.querySelector('.wander-rail');
-    const fish = zone.querySelector('.wander-fish');
-    let dragging = false;
-    let startX = 0;
-    let fishX = 0;
-
-    function onPointerDown(e) {
-      if (locked) return;
-      e.preventDefault();
-      dragging = true;
-      startX = e.clientX - fishX;
-      fish.setPointerCapture(e.pointerId);
-    }
-
-    function onPointerMove(e) {
-      if (!dragging || locked) return;
-      e.preventDefault();
-      const railRect = rail.getBoundingClientRect();
-      const maxX = railRect.width - 36;
-      fishX = Math.max(0, Math.min(maxX, e.clientX - startX));
-      fish.style.transform = `translateX(${fishX}px)`;
-
-      if (fishX >= maxX - 4) {
-        dragging = false;
-        locked = true;
-        doAction('wander');
-      }
-    }
-
-    function onPointerUp() {
-      if (!dragging) return;
-      dragging = false;
-      fishX = 0;
-      fish.style.transform = 'translateX(0)';
-    }
-
-    addListener(fish, 'pointerdown', onPointerDown);
-    addListener(document, 'pointermove', onPointerMove);
-    addListener(document, 'pointerup', onPointerUp);
+  function addWander(area) {
+    const available = ACTIONS.wander.condition(pain, budget, actionCard().indoor);
+    if (!available) return area.insertAdjacentHTML('beforeend', `<div class="wander-locked"><span>돌아다니기</span><small>${actionCard().indoor ? '실내에서는 길게 움직일 수 없다' : '발이 너무 아프다'}</small></div>`);
+    area.insertAdjacentHTML('beforeend', `<div class="wander-track"><span>돌아다니기 · 개복치를 끝까지 끌어라</span><div class="wander-rail">${fishSVG('wander-fish')}<b>→</b></div></div>`);
+    const rail = area.querySelector('.wander-rail'); const fish = area.querySelector('.wander-fish'); let dragging = false; let startX = 0;
+    addListener(fish, 'pointerdown', event => { if (!locked) { dragging = true; startX = event.clientX; fish.setPointerCapture(event.pointerId); } });
+    addListener(document, 'pointermove', event => { if (!dragging || locked) return; const max = rail.getBoundingClientRect().width - fish.getBoundingClientRect().width; const distance = Math.max(0, Math.min(max, event.clientX - startX)); fish.style.transform = `translateX(${distance}px)`; if (distance >= max - 3) { dragging = false; locked = true; doAction('wander'); } });
+    addListener(document, 'pointerup', () => { dragging = false; });
   }
 
-  // ── 행동 실행 ──
-
-  function doAction(actionId) {
-    // 이벤트로 변경된 시야를 사용
-    const actionCard = { ...card, view: currentView };
-    const result = applyRest({ pain, drive, budget, actionId, card: actionCard, rng: ctx.rng });
-
-    if (DEBUG) updateDebug('만족감', result.satisfaction);
-
-    records.push({
-      turn: turnNum, skipped: false, card: actionCard,
-      action: actionId, spend: result.spend,
-      painBefore: pain, painAfter: result.painAfter,
-      painRecovered: result.painRecovered,
-      driveBefore: drive, driveAfter: result.driveAfter,
-      driveDelta: result.driveDelta, satisfaction: result.satisfaction,
-    });
-
-    pain = result.painAfter;
-    drive = result.driveAfter;
-    budget = result.budgetAfter;
-
-    showTurnResult(actionId, result.driveDelta, false, result.painRecovered, result.spend);
+  function launchAction(id) { if (id === 'plan') return showMicroTask('계획 짜기', '지금 가장 먼저 할 일을 고른다.', ['물 마시기', '길 확인하기', '잠시 앉기'], id); if (id === 'chat') return showMicroTask('잡담', '어떤 쪽으로 마음을 열까?', ['먼저 듣는다', '먼저 말한다'], id); doAction(id); }
+  function showMicroTask(title, copy, options, actionId) {
+    render(`<div class="micro-task"><strong>${title}</strong><p>${copy}</p><div class="priority-options">${options.map(option => `<button class="btn">${option}</button>`).join('')}</div></div>`); locked = false;
+    wrap.querySelectorAll('.priority-options button').forEach(button => addListener(button, 'click', () => { if (!locked) { locked = true; doAction(actionId); } }));
   }
 
-  // ── 7. 결과 표시 ──
-
-  function showTurnResult(actionId, driveDelta, skipped, painRecovered, spend) {
-    locked = false;
-
-    let message = '';
-    if (skipped) {
-      message = '지나쳤다.';
-    } else {
-      const action = ACTIONS[actionId];
-      message = action.name;
-      if (actionId === 'spacing') message = '아무것도 안 했다. 개복치도.';
-      if (spend > 0) message += ` (${formatBudget(spend)})`;
-    }
-
-    const driveSign = driveDelta >= 0 ? '+' : '';
-    const painMsg = skipped ? '통증 +4' : `통증 −${painRecovered}`;
-
-    wrap.innerHTML = `
-      ${statsHTML(pain, drive, budget)}
-      <div class="turn-result">
-        <div class="result-action">${message}</div>
-        <div class="result-changes">
-          <span>${painMsg}</span>
-          <span>의지 ${driveSign}${driveDelta}</span>
-        </div>
-      </div>
-    `;
-
-    // ── 8. 엔딩 체크 ──
-    if (drive <= 0 || pain >= 100) {
-      const btn = document.createElement('button');
-      btn.className = 'btn';
-      btn.textContent = '계속';
-      addListener(btn, 'click', () => {
-        if (locked) return;
-        locked = true;
-        cleanup();
-        goto(showEnding, { ...ctx, pain, drive, budget, records, rainNextTurn, turn: turn + 1 });
-      });
-      wrap.appendChild(btn);
-      return;
-    }
-
-    const nextTurn = turn + 1;
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-
-    if (nextTurn >= MAX_TURNS) {
-      btn.textContent = '하루가 끝났다';
-      addListener(btn, 'click', () => {
-        if (locked) return;
-        locked = true;
-        cleanup();
-        goto(showEnding, { ...ctx, pain, drive, budget, records, rainNextTurn, turn: nextTurn });
-      });
-    } else {
-      btn.textContent = '다음';
-      addListener(btn, 'click', () => {
-        if (locked) return;
-        locked = true;
-        cleanup();
-        goto(showTurn, { ...ctx, pain, drive, budget, records, rainNextTurn, turn: nextTurn });
-      });
-    }
-    wrap.appendChild(btn);
+  function doAction(id) {
+    const before = { pain, drive, budget }; const result = applyRest({ pain, drive, budget, actionId: id, card: actionCard(), rng }); pain = result.painAfter; drive = result.driveAfter; budget = result.budgetAfter;
+    records.push({ turn: turnNum, skipped: false, card: actionCard(), action: id, spend: result.spend, painBefore: before.pain, painAfter: pain, painRecovered: result.painRecovered, driveBefore: before.drive, driveAfter: drive, driveDelta: result.driveDelta, satisfaction: result.satisfaction, reasons: result }); if (DEBUG) updateDebug('만족감', result.satisfaction);
+    const viewText = currentView === 'wide' ? '열린 시야' : currentView === 'mid' ? '중간 시야' : '좁은 시야'; const reason = `${viewText}가 의지를 밀어줬다 (${signed(result.viewBonus)}) · ${result.efficiency < 1 ? `높은 통증으로 회복 효율 ${Math.round(result.efficiency * 100)}%` : '몸이 비교적 잘 회복됐다'}`;
+    showTurnOutcome(id === 'spacing' ? '아무것도 안 했다. 개복치도.' : ACTIONS[id].name, { pain: pain - before.pain, drive: drive - before.drive, budget: budget - before.budget }, reason);
   }
 
-  return cleanup;
-}
-
-// ── 잠금 사유 ──
-
-function getLockReason(actionId, pain, budget, indoor) {
-  switch (actionId) {
-    case 'dessert': return '돈이 부족하다';
-    case 'meal': return '돈이 부족하다';
-    case 'chat': return '발이 너무 아프다';
-    case 'plan': return '발이 너무 아프다';
-    case 'wander':
-      if (indoor) return '실내라 돌아다닐 수 없다';
-      return '발이 너무 아프다';
-    default: return '';
+  function showTurnOutcome(title, changes, reason) {
+    render(`<div class="outcome-panel"><strong>${title}</strong><p>통증 ${changes.pain <= 0 ? '−' : '+'}${Math.abs(changes.pain)} / 의지 ${signed(changes.drive)}${changes.budget ? ` / 예산 −${formatBudget(Math.abs(changes.budget))}` : ''}</p><small>${reason}</small></div><div class="turn-log">${turnNum}턴 · ${card.name} · ${title} · 통증 ${changes.pain <= 0 ? '−' : '+'}${Math.abs(changes.pain)} · 의지 ${signed(changes.drive)}</div>`, changes);
+    addTimer(() => { if (isOver() || turn + 1 >= MAX_TURNS) return leave(showEnding, turn + 1); leave(showTurn, turn + 1); }, AUTO_NEXT_MS);
   }
+
+  showPlace(); return cleanup;
 }
