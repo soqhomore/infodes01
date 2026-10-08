@@ -18,6 +18,7 @@ html, body {
 #app {
   height: 100dvh;
   overflow-y: auto;
+  background: #1a1a1a;
 }
 
 /* ── 공통 씬 ── */
@@ -144,6 +145,8 @@ html, body {
 .turn {
   justify-content: flex-start;
   padding-top: 40px;
+  transition: clip-path 0.4s ease;
+  background: #fff;
 }
 
 .turn-info {

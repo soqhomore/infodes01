@@ -43,6 +43,13 @@ export const VIEW_BONUS = {
   wide: 7,
 };
 
+// ── 시야 clip-path 폭 (%) ──
+export const VIEW_CLIP = {
+  narrow: 40,
+  mid: 70,
+  wide: 100,
+};
+
 // ── 행동 정의 ──
 export const ACTIONS = {
   spacing:  { name: '멍때리기',   initiative: 1, recovery: 14, spendRange: null,        condition: () => true },

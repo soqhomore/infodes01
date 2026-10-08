@@ -4,7 +4,7 @@
 
 import {
   MOVE_PAIN, ACTIONS, FORCE_REST_PAIN, MAX_TURNS,
-  VIEW_BONUS, clampStat, applyRest, applySkip,
+  VIEW_BONUS, VIEW_CLIP, clampStat, applyRest, applySkip,
 } from '../state.js';
 import { updateDebug, DEBUG } from '../debug.js';
 import { showEnding } from './ending.js';
@@ -87,10 +87,27 @@ export function showTurn(app, ctx, goto) {
     return cleanup;
   }
 
+  // ── 시야 clip-path ──
+  const clipPct = VIEW_CLIP[card.view];
+  const inset = (100 - clipPct) / 2; // 좌우 대칭
+
   // ── 화면 ──
   const wrap = document.createElement('div');
   wrap.className = 'scene turn';
   app.appendChild(wrap);
+
+  // clip-path를 감싸는 컨테이너에 적용
+  function applyClip() {
+    if (clipPct < 100) {
+      wrap.style.clipPath = `inset(0 ${inset}% 0 ${inset}%)`;
+    } else {
+      wrap.style.clipPath = '';
+    }
+  }
+
+  function removeClip() {
+    wrap.style.clipPath = '';
+  }
 
   showCardReveal();
 
@@ -98,6 +115,7 @@ export function showTurn(app, ctx, goto) {
 
   function showCardReveal() {
     locked = false;
+    applyClip();
     wrap.innerHTML = `
       ${statsHTML(pain, drive, budget)}
       <div class="turn-info">
@@ -385,6 +403,7 @@ export function showTurn(app, ctx, goto) {
 
   function showTurnResult(actionId, driveDelta, skipped, painRecovered, spend) {
     locked = false;
+    removeClip();
 
     let message = '';
     if (skipped) {
