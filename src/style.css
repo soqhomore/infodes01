@@ -305,6 +305,10 @@ html, body {
 
 .wander-fish {
   position: absolute;
+  left: 0;
+  top: 5px;
+  width: 44px;
+  height: 30px;
   z-index: 1;
   cursor: grab;
   touch-action: none;
