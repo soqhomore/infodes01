@@ -158,6 +158,18 @@ html, body {
   background: #fff;
 }
 
+.day-clock { width: min(100%, 340px); display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: #53636f; }
+.day-clock strong { font-size: 22px; color: #234b61; }
+.day-clock span { font-size: 12px; text-align: right; }
+.day-choices { display: grid; gap: 10px; width: min(100%, 330px); }
+.next-place { width: min(100%, 330px); padding: 12px; border-left: 2px solid #9db6c7; font-size: 13px; line-height: 1.6; color: #53636f; }
+.next-place p { margin-top: 5px; color: #9a5144; }
+.btn-return { border-color: transparent; background: transparent; color: #647985; }
+.turn > .action-buttons { width: min(100%, 330px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.turn > .action-buttons .btn { width: 100%; min-height: 48px; padding: 10px 12px; font-size: 14px; }
+.wander-track { width: min(100%, 330px); }
+.btn:focus-visible, .result-bar:focus-visible, .highlight-button:focus-visible { outline: 3px solid #277ecc; outline-offset: 3px; }
+
 .place-stage { width: min(100%, 340px); min-height: 150px; position: relative; overflow: hidden; border-radius: 14px; background: #e8f2f9; }
 .journey-stage { width: min(100%, 340px); min-height: 190px; padding: 24px 22px 18px; border-radius: 14px; color: #234b61; background: linear-gradient(145deg, #dceff5, #f7fbf8); box-shadow: inset 0 -42px 0 rgba(119, 166, 138, .18); }
 .journey-meta { font-size: 13px; color: #648090; }
@@ -520,3 +532,66 @@ html, body {
 
 .result-observation, .record-detail { max-width: 320px; font-size: 13px; line-height: 1.55; text-align: center; color: #53636f; }
 .record-detail { padding: 10px; background: #f2f6f8; border-radius: 8px; color: #46545f; }
+
+.result-chart { width: min(100%, 360px); overflow-x: auto; padding: 12px 4px; }
+.result-chart .result-svg { display: block; max-width: none; }
+.result-highlights { width: min(100%, 320px); display: grid; gap: 8px; }
+.highlight-button { text-align: left; background: #fff; border: 1px solid #d2dce3; padding: 10px; color: #46545f; font: inherit; font-size: 13px; cursor: pointer; border-radius: 8px; }
+.highlight-button span { display: block; margin-top: 4px; color: #607d8b; font-size: 12px; }
+.record-detail { white-space: pre-line; }
+.timeline-legend .event-legend::before { border-radius: 50%; background: #4d8da9; }
+.rest-advice {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #edf5fa;
+  color: #285575;
+  line-height: 1.5;
+}
+
+/* 하루의 빛: 풍경과 조작은 유지하고 시각이 바뀔 때만 색조를 바꾼다. */
+.scene[class*="day-phase-"] {
+  --sky: #d8eef5; --ground: #8ba99b; --ink: #233d50; --paper: #f4f9fb;
+  background: var(--paper); color: var(--ink);
+}
+.scene.day-phase-day { --sky: #a9daec; --ground: #82a998; --paper: #f2f7f7; }
+.scene.day-phase-sunset { --sky: #e6ad93; --ground: #767f91; --paper: #f5e6df; --ink: #523f49; }
+.scene.day-phase-night { --sky: #253953; --ground: #15283b; --paper: #152334; --ink: #e0eaf3; }
+.day-sky { width: min(100%, 340px); position: relative; color: var(--ink); }
+.day-sky svg { display: block; width: 100%; border-radius: 10px; background: var(--sky); }
+.day-sky span { position: absolute; bottom: 10px; left: 14px; font-size: 12px; }
+.sky-ridge { fill: var(--ground); }
+.sky-sun { fill: #f7d58a; }
+.sky-moon, .sky-stars { display: none; fill: #dfebf6; }
+.day-phase-night .sky-sun { display: none; }
+.day-phase-night .sky-moon, .day-phase-night .sky-stars { display: block; }
+.scene[class*="day-phase-"] .place-landscape { background: linear-gradient(var(--sky) 0 56%, var(--ground) 57%); }
+.scene[class*="day-phase-"] .place-stage { background: var(--sky); }
+.scene[class*="day-phase-"] .journey-stage { background: var(--sky); color: var(--ink); }
+.scene[class*="day-phase-"] .stat-label { width: 76px; flex-shrink: 0; }
+.scene[class*="day-phase-"] .turn-info { width: min(100%, 340px); }
+.duration-panel { width: min(100%, 330px); text-align: center; display: grid; gap: 10px; }
+.duration-panel:empty { display: none; }
+.overstay-warning { font-size: 13px; line-height: 1.5; color: #a14d36; }
+.selected-action { background: #d9eaf1; }
+.day-phase-night .day-clock, .day-phase-night .day-clock strong,
+.day-phase-night .stat-budget, .day-phase-night .pressure-copy,
+.day-phase-night .journey-meta, .day-phase-night .journey-sight,
+.day-phase-night .btn-return, .day-phase-night .place-caption,
+.day-phase-night .turn-log { color: #d0deeb; }
+.day-phase-night .btn { background: #263d54; color: #edf4fa; border-color: #9ab6cb; }
+.day-phase-night .btn:disabled { opacity: .5; }
+.day-phase-night .selected-action { background: #345675; }
+.day-phase-night .btn-return { border-color: transparent; }
+.day-phase-night .rest-advice { background: #29435d; color: #e6f0f8; }
+.day-phase-night .overstay-warning { color: #f4c29a; }
+.day-phase-night .outcome-panel { background: #263d54; color: #edf4fa; }
+.day-phase-night .micro-task, .day-phase-night .meal-panel, .day-phase-night .wander-track {
+  background: #263d54; color: #edf4fa;
+}
+.day-phase-night .action-prompt, .day-phase-night .outcome-panel small,
+.day-phase-night .ending-line, .day-phase-night .spacing-hint,
+.day-phase-night .meal-panel p { color: #d0deeb; }
+@media (prefers-reduced-motion: reduce) {
+  .journey-line span { animation: none; }
+  .stat-fill, #app { transition: none; }
+}

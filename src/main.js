@@ -3,6 +3,7 @@ import { createRng } from './rng.js';
 import { initDebugPanel, updateDebug, SEED_PARAM, JUMP, DEBUG } from './debug.js';
 import { showIntro } from './scenes/intro.js';
 import { showResult } from './scenes/result.js';
+import { SCENE_TIMING } from './state.js';
 
 const app = document.getElementById('app');
 
@@ -15,7 +16,7 @@ let currentCleanup = null;
  * @param {function} sceneFn - (app, context, goto) => cleanup
  * @param {object} context - 게임 상태
  */
-const FADE_MS = 180;
+const FADE_MS = SCENE_TIMING.fade;
 
 export function goto(sceneFn, context) {
   // fade-out
@@ -47,11 +48,11 @@ function makeSeed() {
 initDebugPanel();
 
 if (JUMP === 'result') {
-  // fake-run.json으로 결과 화면 바로 진입
-  import('./data/fake-run.json').then(mod => {
+  // 반복 체류·구매·식사를 포함한 실제 하루 API 샘플로 결과 진입
+  import('./data/fake-day.js').then(mod => {
     const seed = makeSeed();
     updateDebug('시드', seed);
-    goto(showResult, { records: mod.default, seed });
+    goto(showResult, { ...mod.createSampleDay(), seed });
   });
 } else {
   const seed = makeSeed();

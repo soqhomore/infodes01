@@ -1,41 +1,26 @@
-/**
- * 엔딩 씬 — §10 엔딩 판정
- */
-
-import { MAX_TURNS } from '../state.js';
+import { formatTime, getDayPhase } from '../state.js';
+import { daylightHTML } from '../daylight.js';
+import { getDayEndReason } from '../day.js';
 import { showResult } from './result.js';
 
-const ENDINGS = [
-  { id: 'early-drive',  condition: (p, d, t) => d <= 0,               title: '조기 귀국',    line: '개복치는 숙소로 돌아가 버렸다.' },
-  { id: 'early-pain',   condition: (p, d, t) => p >= 100,             title: '발이 먼저 끝냈다', line: '개복치는 더 걷지 못하고 주저앉았다.' },
-  { id: 'good',         condition: (p, d, t) => t >= MAX_TURNS && d >= 70, title: '좋은 하루',    line: '개복치가 팔딱거린다.' },
-  { id: 'normal',       condition: (p, d, t) => t >= MAX_TURNS && d >= 40, title: '무난한 하루',  line: '개복치는 평온하다.' },
-  { id: 'tired',        condition: () => true,                         title: '길었던 하루',  line: '개복치는 지쳤다.' },
-];
+const ENDINGS = {
+  time: { title: '돌아갈 시간', line: '오늘은 여기까지. 개복치와 하루를 돌아본다.' },
+  returned: { title: '오늘은 여기까지', line: '더 걷는 대신, 오늘의 여행을 마치기로 했다.' },
+  pain: { title: '발이 먼저 끝냈다', line: '개복치는 더 걷지 못하고 주저앉았다.' },
+  drive: { title: '숙소로 돌아간다', line: '개복치는 이제 돌아가고 싶어 한다.' },
+};
 
 export function showEnding(app, ctx, goto) {
   let locked = false;
-  const { pain, drive, turn, records } = ctx;
-
-  const ending = ENDINGS.find(e => e.condition(pain, drive, turn));
-
+  const endingId = getDayEndReason(ctx) || 'returned';
+  const ending = ENDINGS[endingId];
   const wrap = document.createElement('div');
-  wrap.className = 'scene ending';
-  wrap.innerHTML = `
-    <div class="ending-title">${ending.title}</div>
-    <div class="ending-line">${ending.line}</div>
-  `;
-
-  const btn = document.createElement('button');
-  btn.className = 'btn';
-  btn.textContent = '결과 보기';
-  btn.addEventListener('click', () => {
-    if (locked) return;
-    locked = true;
-    goto(showResult, { ...ctx, endingId: ending.id });
-  });
-  wrap.appendChild(btn);
-
-  app.appendChild(wrap);
-  return null;
+  wrap.className = `scene ending day-phase-${getDayPhase(ctx.currentTime).id}`;
+  wrap.innerHTML = `${daylightHTML(ctx.currentTime)}<div class="ending-title">${ending.title}</div><div class="ending-line">${ending.line}</div><p class="ending-line">${formatTime(ctx.currentTime)} · ${ctx.visits.length}곳 방문 · ${ctx.records.length}번 머묾</p>`;
+  const button = document.createElement('button');
+  button.className = 'btn'; button.textContent = '하루 기록 보기';
+  const proceed = () => { if (locked) return; locked = true; goto(showResult, { ...ctx, endingId }); };
+  button.addEventListener('click', proceed);
+  wrap.appendChild(button); app.appendChild(wrap);
+  return () => { locked = true; button.removeEventListener('click', proceed); };
 }

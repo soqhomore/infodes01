@@ -50,7 +50,11 @@ export function createDeck(destination, rng) {
   let idx = 0;
 
   return {
-    /** 한 장 뽑기. 9장 중 7장까지 뽑을 수 있다. */
+    /** 다음 장소 예고. 덱이나 RNG를 소비하지 않는다. */
+    peek() {
+      return cards[idx] || null;
+    },
+    /** 한 장 뽑기. 여행 시간 안에서 최대 9곳을 방문한다. */
     draw() {
       if (idx >= cards.length) throw new Error('덱에 카드가 없다');
       return cards[idx++];

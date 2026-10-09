@@ -6,9 +6,8 @@ import { DESTINATIONS } from '../deck.js';
 import { showDeparture } from './departure.js';
 import { createRng } from '../rng.js';
 import { createDeck } from '../deck.js';
-import {
-  INITIAL_PAIN, INITIAL_DRIVE, INITIAL_BUDGET, MAX_TURNS, DAY_START,
-} from '../state.js';
+import { DAY_END, formatTime } from '../state.js';
+import { createDay } from '../day.js';
 import { updateDebug, DEBUG } from '../debug.js';
 import { assignEventSlots } from '../events.js';
 
@@ -19,7 +18,7 @@ export function showIntro(app, context, goto) {
   wrap.className = 'scene intro';
   wrap.innerHTML = `
     <h1>개복치 휴식 시뮬레이터</h1>
-    <p class="intro-sub">개복치와 하루를 여행합니다.<br>어디로 갈까요?</p>
+    <p class="intro-sub">아침부터 밤까지 개복치와 하루를 여행합니다.<br>${formatTime(DAY_END)}까지, 어디에서 얼마나 머물까요?</p>
     <div class="intro-buttons"></div>
   `;
 
@@ -41,21 +40,13 @@ export function showIntro(app, context, goto) {
       if (DEBUG) updateDebug('이벤트', `유혹T${eventSlots.temptation} 부정T${eventSlots.negative} 긍정T${eventSlots.positive}`);
 
       goto(showDeparture, {
+        ...createDay(),
         seed: context.seed,
         rng,
         deck,
         destination: dest.id,
-        turn: 0,
-        pain: INITIAL_PAIN,
-        drive: INITIAL_DRIVE,
-        budget: INITIAL_BUDGET,
-        records: [],
         eventSlots,
         usedEvents: new Set(),
-        rainNextTurn: false,
-        mealRecords: [],
-        timeline: [],
-        currentTime: DAY_START,
         destinationInfo: dest,
       });
     });

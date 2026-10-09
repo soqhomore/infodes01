@@ -1,15 +1,17 @@
 /** 여행지 선택 뒤, 첫 이동 전의 출발 프롤로그 */
-import { DAY_START, formatTime } from '../state.js';
+import { DAY_START, formatTime, getDayPhase, SCENE_TIMING } from '../state.js';
+import { daylightHTML } from '../daylight.js';
 import { showTurn } from './turn.js';
 
-const DEPARTURE_MS = 2500;
+const DEPARTURE_MS = SCENE_TIMING.departure;
 
 export function showDeparture(app, ctx, goto) {
   let locked = false;
   const destination = ctx.destinationInfo;
   const wrap = document.createElement('div');
-  wrap.className = 'scene departure';
+  wrap.className = `scene departure day-phase-${getDayPhase(ctx.currentTime).id}`;
   wrap.innerHTML = `
+    ${daylightHTML(ctx.currentTime)}
     <div class="departure-time">${formatTime(DAY_START)} · ${destination.name}</div>
     <div class="departure-fish" aria-hidden="true">◒</div>
     <p class="departure-copy">${destination.departureCopy}</p>

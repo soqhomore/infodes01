@@ -1,284 +1,80 @@
-/**
- * 결과 화면 — §10 정적 SVG
- */
+/** 방문 수와 독립된 휴식 기록, 하루 타임라인. */
+import { ACTIONS, DAY_START, DAY_END, formatTime } from '../state.js';
+import { buildResultData, describeRest } from '../records.js';
 
-import { ACTIONS, MAX_TURNS, DAY_START, formatTime } from '../state.js';
-
-// ── SVG 레이아웃 상수 ──
-
-const SVG_W = 360;
-const SVG_H = 420;
-const BAR_W = 30;
-const BAR_GAP = 14;
-const CHART_LEFT = 40;
-const CHART_TOP = 60;
-const CHART_H = 200;
-const LABEL_Y = CHART_TOP + CHART_H + 16;
-const PLACE_Y = LABEL_Y + 16;
-const SPEND_DOT_R = 4;
 const VIEW_MARK = { narrow: '◐', mid: '◑', wide: '●' };
+const BAR_W = 30;
+const BAR_STEP = 54;
+const CHART_TOP = 30;
+const CHART_H = 180;
+const SVG_H = 295;
+const xFor = index => 28 + index * BAR_STEP;
+const money = value => `¥${value.toLocaleString()}`;
 
-// ── 유틸 ──
-
-function actionName(id) {
-  if (!id) return '';
-  return ACTIONS[id] ? ACTIONS[id].name : id;
-}
-
-function signed(value) {
-  return `${value >= 0 ? '+' : ''}${value}`;
-}
-
-function barX(i) {
-  return CHART_LEFT + i * (BAR_W + BAR_GAP);
-}
-
-function barColor(spend) {
-  if (spend <= 0) return '#aaa';
-  const opacity = 0.35 + 0.65 * Math.min(spend / 1800, 1);
-  return `rgba(76, 175, 80, ${opacity.toFixed(2)})`;
-}
-
-// ── 메인 ──
-
-export function showResult(app, ctx, goto) {
-  const { records, mealRecords = [], eventRecords = [], timeline = [] } = ctx;
-
-  // 만족감 최대값 (스케일링용)
-  const maxSat = Math.max(10, ...records.map(r => r.satisfaction));
-  const maxSpend = Math.max(1, ...records.map(r => r.spend));
-
-  // ── 평균 계산 ──
-  const withMoney = records.filter(r => !r.skipped && r.spend > 0);
-  const withoutMoney = records.filter(r => !r.skipped && r.spend === 0);
-
-  const avgWith = withMoney.length > 0
-    ? withMoney.reduce((s, r) => s + r.satisfaction, 0) / withMoney.length
-    : null;
-  const avgWithout = withoutMoney.length > 0
-    ? withoutMoney.reduce((s, r) => s + r.satisfaction, 0) / withoutMoney.length
-    : null;
-
-  // ── 세 휴식 강조 ──
-  const rested = records.filter(r => !r.skipped);
-
-  let bestPainRec = null;   // 통증 회복 최대
-  let bestDriveRec = null;  // Δ의지 최대
-  let bestSpendRec = null;  // 지출 최대
-
-  for (const r of rested) {
-    if (!bestPainRec || r.painRecovered > bestPainRec.painRecovered
-        || (r.painRecovered === bestPainRec.painRecovered && r.turn > bestPainRec.turn)) {
-      bestPainRec = r;
-    }
-    if (!bestDriveRec || r.driveDelta > bestDriveRec.driveDelta
-        || (r.driveDelta === bestDriveRec.driveDelta && r.turn > bestDriveRec.turn)) {
-      bestDriveRec = r;
-    }
-    if (r.spend > 0) {
-      if (!bestSpendRec || r.spend > bestSpendRec.spend
-          || (r.spend === bestSpendRec.spend && r.turn > bestSpendRec.turn)) {
-        bestSpendRec = r;
-      }
-    }
+export function showResult(app, ctx) {
+  const { rested, highlights, avgWith, avgWithout } = buildResultData(ctx);
+  const { visits = [], mealRecords = [], eventRecords = [], timeline = [] } = ctx;
+  const width = Math.max(340, 56 + BAR_STEP * rested.length);
+  const maxSpend = Math.max(1, ...rested.map(record => record.spend));
+  let chart = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${SVG_H}" style="width:${width}px" class="result-svg" aria-label="쉼마다의 마음 환기와 지출">`;
+  for (const [index, record] of rested.entries()) {
+    const x = xFor(index);
+    const height = record.satisfaction / 10 * CHART_H;
+    const y = CHART_TOP + CHART_H - height;
+    const fill = record.spend > 0 ? `rgba(76,175,80,${0.35 + 0.65 * Math.min(record.spend / 1800, 1)})` : '#aaa';
+    chart += `<g class="result-bar" data-rest-id="${record.restId}" role="button" tabindex="0" aria-label="${index + 1}번째 쉼, ${record.card.name}, ${ACTIONS[record.action].name}, 마음 환기 ${record.satisfaction}, 통증 회복 ${record.painRecovered}, 마음의 여유 변화 ${record.driveDelta}"><rect x="${x}" y="${y}" width="${BAR_W}" height="${height}" rx="3" fill="${fill}"/><rect x="${x}" y="${Math.min(y, CHART_TOP + CHART_H - 12)}" width="${BAR_W}" height="${Math.max(height, 12)}" fill="transparent"/><text x="${x + BAR_W / 2}" y="${y - 5}" text-anchor="middle" class="svg-sat-label">${record.satisfaction}</text></g>`;
+    chart += `<text x="${x + BAR_W / 2}" y="${CHART_TOP + CHART_H + 16}" text-anchor="middle" class="svg-action">${ACTIONS[record.action].name}</text><text x="${x + BAR_W / 2}" y="${CHART_TOP + CHART_H + 30}" text-anchor="middle" class="svg-place">${record.card.name}</text><text x="${x + BAR_W / 2}" y="${CHART_TOP + CHART_H + 44}" text-anchor="middle" class="svg-marker">${VIEW_MARK[record.card.view]} · ${record.restMinutes}분</text><text x="${x + BAR_W / 2}" y="${CHART_TOP + CHART_H + 58}" text-anchor="middle" class="svg-marker">${index + 1}번째 쉼</text>`;
   }
+  const spendPoints = rested.flatMap((record, index) => record.spend > 0 ? [{ x: xFor(index) + BAR_W / 2, y: CHART_TOP + CHART_H - record.spend / maxSpend * CHART_H * 0.8, spend: record.spend }] : []);
+  if (spendPoints.length > 1) chart += `<path d="${spendPoints.map((point, index) => `${index ? 'L' : 'M'}${point.x},${point.y}`).join(' ')}" fill="none" stroke="#ff9800" stroke-width="2" stroke-dasharray="4,3" pointer-events="none"/>`;
+  for (const point of spendPoints) chart += `<circle cx="${point.x}" cy="${point.y}" r="4" fill="#ff9800" pointer-events="none"/><text x="${point.x}" y="${point.y - 8}" text-anchor="middle" class="svg-spend" pointer-events="none">${money(point.spend)}</text>`;
+  chart += '</svg>';
 
-  // ── SVG 조립 ──
-  let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SVG_W} ${SVG_H}" class="result-svg">`;
-
-  // 만족감 막대
-  for (let i = 0; i < MAX_TURNS; i++) {
-    const r = records.find(rec => rec.turn === i + 1);
-    const x = barX(i);
-
-    if (!r) {
-      // 조기 엔딩으로 빈 턴
-      continue;
-    }
-
-    if (r.skipped) {
-      svg += `<text x="${x + BAR_W / 2}" y="${CHART_TOP + CHART_H - 4}" text-anchor="middle" class="svg-skip">지나침</text>`;
-    } else {
-      const h = (r.satisfaction / maxSat) * CHART_H;
-      const y = CHART_TOP + CHART_H - h;
-      svg += `<rect class="result-bar" data-turn="${r.turn}" x="${x}" y="${y}" width="${BAR_W}" height="${h}" rx="3" fill="${barColor(r.spend)}" />`;
-      svg += `<text x="${x + BAR_W / 2}" y="${y - 4}" text-anchor="middle" class="svg-sat-label">${r.satisfaction}</text>`;
-    }
-
-    // 행동 이름
-    svg += `<text x="${x + BAR_W / 2}" y="${LABEL_Y}" text-anchor="middle" class="svg-action">${r.skipped ? '' : actionName(r.action)}</text>`;
-    // 장소 이름
-    svg += `<text x="${x + BAR_W / 2}" y="${PLACE_Y}" text-anchor="middle" class="svg-place">${r.card.name}</text>`;
-    if (!r.skipped) {
-      svg += `<text x="${x + BAR_W / 2}" y="${PLACE_Y + 14}" text-anchor="middle" class="svg-marker">${VIEW_MARK[r.card.view]} 시야 · ▲${ACTIONS[r.action].initiative}</text>`;
-    }
-    const meal = mealRecords.find(entry => entry.turn === r.turn);
-    if (meal) svg += `<text x="${x + BAR_W / 2}" y="${CHART_TOP + CHART_H + 44}" text-anchor="middle" class="svg-meal">● 식사</text>`;
+  const tX = time => 10 + (time - DAY_START) / (DAY_END - DAY_START) * 320;
+  const colors = { walk: '#cde4f0', meal: '#d8ad58', rest: '#7bafd4', skip: '#e0e0e0' };
+  let timeSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 90" class="result-timeline" aria-label="하루의 이동, 식사, 쉼과 사건">';
+  timeSvg += '<line x1="10" y1="49" x2="330" y2="49" stroke="#ddd"/>';
+  for (const entry of timeline) timeSvg += `<rect x="${tX(entry.startTime)}" y="41" width="${Math.max(0, tX(entry.endTime) - tX(entry.startTime))}" height="16" rx="2" fill="${colors[entry.type]}"><title>${entry.label} · ${formatTime(entry.startTime)} → ${formatTime(entry.endTime)}</title></rect>`;
+  for (const event of eventRecords) {
+    const x = tX(event.time);
+    const marker = event.type === 'purchase' ? '¥' : event.type === 'incident' ? '!' : '●';
+    const fill = event.type === 'purchase' ? '#bd7423' : event.type === 'incident' ? '#d45a5a' : '#4d8da9';
+    timeSvg += `<g class="timeline-event" data-visit-id="${event.visitId}"><title>${formatTime(event.time)} ${event.description}</title><circle cx="${x}" cy="49" r="5" fill="${fill}"/><text x="${x}" y="52" text-anchor="middle" class="svg-tl-event">${marker}</text></g>`;
+    if (event.type === 'purchase') timeSvg += `<text x="${x}" y="29" text-anchor="middle" class="svg-tl-purchase">−${money(event.spend)}</text>`;
   }
+  const totalFor = type => timeline.filter(entry => entry.type === type).reduce((sum, entry) => sum + entry.endTime - entry.startTime, 0);
+  timeSvg += `<line x1="330" y1="35" x2="330" y2="61" stroke="#71808a" stroke-dasharray="2,2"/><text x="10" y="13" class="svg-tl-label">${formatTime(DAY_START)}</text><text x="330" y="13" text-anchor="end" class="svg-tl-label">${formatTime(DAY_END)} 돌아갈 시간</text><text x="170" y="79" text-anchor="middle" class="svg-tl-summary">이동 ${totalFor('walk')}분 · 식사 ${totalFor('meal')}분 · 쉼 ${totalFor('rest')}분</text></svg>`;
 
-  // 금액 점+선
-  const spendPoints = [];
-  for (let i = 0; i < MAX_TURNS; i++) {
-    const r = records.find(rec => rec.turn === i + 1);
-    if (!r || r.skipped || r.spend === 0) continue;
-    const x = barX(i) + BAR_W / 2;
-    const spendH = (r.spend / maxSpend) * (CHART_H * 0.8);
-    const y = CHART_TOP + CHART_H - spendH;
-    spendPoints.push({ x, y, spend: r.spend });
-  }
-
-  if (spendPoints.length > 1) {
-    const linePath = spendPoints.map((p, idx) => `${idx === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ');
-    svg += `<path d="${linePath}" fill="none" stroke="#ff9800" stroke-width="2" stroke-dasharray="4,3" />`;
-  }
-
-  for (const p of spendPoints) {
-    svg += `<circle cx="${p.x}" cy="${p.y}" r="${SPEND_DOT_R}" fill="#ff9800" />`;
-    svg += `<text x="${p.x}" y="${p.y - 8}" text-anchor="middle" class="svg-spend">¥${p.spend.toLocaleString()}</text>`;
-  }
-
-  // 세 휴식 강조 라벨
-  const highlights = [];
-  if (bestPainRec) highlights.push({ turn: bestPainRec.turn, label: '몸을 가장 쉬게 한' });
-  if (bestDriveRec) highlights.push({ turn: bestDriveRec.turn, label: '다시 걷게 한' });
-  if (bestSpendRec) highlights.push({ turn: bestSpendRec.turn, label: '가장 비쌌던' });
-
-  for (const h of highlights) {
-    const i = h.turn - 1;
-    const x = barX(i) + BAR_W / 2;
-    svg += `<text x="${x}" y="${CHART_TOP - 8}" text-anchor="middle" class="svg-highlight">${h.label}</text>`;
-  }
-
-  svg += '</svg>';
-
-  // ── 타임라인 SVG ──
-  const TL_W = 340;
-  const TL_H = 50;
-  const TL_PAD = 10;
-  const TL_BAR_Y = 20;
-  const TL_BAR_H = 16;
-
-  const hasTime = timeline.length > 0;
-  let timelineSvg = '';
-
-  if (hasTime) {
-    const dayStart = DAY_START;
-    const endTime = Math.max(dayStart, ...timeline.map(entry => entry.endTime));
-    const totalSpan = Math.max(1, endTime - dayStart);
-    const timelineColors = { walk: '#cde4f0', meal: '#d8ad58', rest: '#7bafd4', skip: '#e0e0e0' };
-
-    const tX = (t) => TL_PAD + ((t - dayStart) / totalSpan) * (TL_W - TL_PAD * 2);
-
-    timelineSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${TL_W} ${TL_H}" class="result-timeline">`;
-    // 배경 라인
-    timelineSvg += `<line x1="${TL_PAD}" y1="${TL_BAR_Y + TL_BAR_H / 2}" x2="${TL_W - TL_PAD}" y2="${TL_BAR_Y + TL_BAR_H / 2}" stroke="#ddd" stroke-width="1"/>`;
-
-    for (const entry of timeline) {
-      const x1 = tX(entry.startTime);
-      const x2 = tX(entry.endTime);
-      if (x2 > x1) {
-        timelineSvg += `<rect x="${x1}" y="${TL_BAR_Y}" width="${x2 - x1}" height="${TL_BAR_H}" rx="2" fill="${timelineColors[entry.type]}"/>`;
-      }
-    }
-
-    for (const event of eventRecords) {
-      const x = tX(event.time);
-      const marker = event.type === 'purchase' ? '¥' : event.type === 'incident' ? '!' : '●';
-      const fill = event.type === 'purchase' ? '#d4872d' : event.type === 'incident' ? '#d45a5a' : '#4d8da9';
-      timelineSvg += `<circle cx="${x}" cy="${TL_BAR_Y + TL_BAR_H / 2}" r="5" fill="${fill}"/>`;
-      timelineSvg += `<text x="${x}" y="${TL_BAR_Y + TL_BAR_H / 2 + 3}" text-anchor="middle" class="svg-tl-event">${marker}</text>`;
-      if (event.type === 'purchase') timelineSvg += `<text x="${x}" y="${TL_BAR_Y - 7}" text-anchor="middle" class="svg-tl-purchase">−¥${event.spend.toLocaleString()}</text>`;
-    }
-
-    // 시작·끝 시각 레이블
-    timelineSvg += `<text x="${TL_PAD}" y="${TL_BAR_Y - 4}" class="svg-tl-label">${formatTime(dayStart)}</text>`;
-    timelineSvg += `<text x="${TL_W - TL_PAD}" y="${TL_BAR_Y - 4}" text-anchor="end" class="svg-tl-label">${formatTime(endTime)}</text>`;
-
-    // 총 시간 요약
-    const totalFor = type => timeline.filter(entry => entry.type === type).reduce((sum, entry) => sum + entry.endTime - entry.startTime, 0);
-    timelineSvg += `<text x="${TL_W / 2}" y="${TL_BAR_Y + TL_BAR_H + 14}" text-anchor="middle" class="svg-tl-summary">이동 ${totalFor('walk')}분 · 식사 ${totalFor('meal')}분 · 쉼 ${totalFor('rest') + totalFor('skip')}분</text>`;
-
-    timelineSvg += '</svg>';
-  }
-
-  // ── 문구 조립 ──
-  let comparisonMsg = '';
-  if (avgWith === null || avgWithout === null) {
-    comparisonMsg = '비교할 짝이 적다. 시야와 행동 표식을 함께 보자.';
-  } else if (avgWith <= avgWithout) {
-    comparisonMsg = '이번 기록에서 돈을 쓴 휴식이 더 높았던 건 아니었다.';
-  } else {
-    comparisonMsg = '이번에는 돈을 쓴 휴식도 높았다. 그때 공간과 행동도 함께 보자.';
-  }
-
-  // 세 휴식 코멘트
-  let highlightComment = '';
-  if (bestDriveRec && bestSpendRec) {
-    if (bestDriveRec.turn !== bestSpendRec.turn) {
-      highlightComment = '가장 비쌌던 휴식이 나를 다시 걷게 한 건 아니었다.';
-    } else {
-      highlightComment = `이번에는 가장 비쌌던 휴식이 가장 좋았다. 그때 시야는 ${bestDriveRec.card.view}이었다.`;
-    }
-  }
-
-  // ── DOM 조립 ──
-  const wideOrActive = rested.filter(r => r.card.view === 'wide' || ACTIONS[r.action].initiative >= 6);
-  const other = rested.filter(r => !wideOrActive.includes(r));
-  const activeAvg = wideOrActive.length ? wideOrActive.reduce((sum, r) => sum + r.satisfaction, 0) / wideOrActive.length : null;
-  const otherAvg = other.length ? other.reduce((sum, r) => sum + r.satisfaction, 0) / other.length : null;
-  const observation = activeAvg !== null && otherAvg !== null
-    ? `이번 ${rested.length}번의 쉼에서는 열린 공간·주도적 행동 쪽이 평균 ${activeAvg.toFixed(1)}, 다른 쉼이 ${otherAvg.toFixed(1)}이었다.`
-    : `이번 ${rested.length}번의 쉼에서는 금액뿐 아니라 머문 공간과 내가 고른 행동을 함께 남겼다.`;
-
+  const comparison = avgWith === null || avgWithout === null ? '비교할 짝이 적다. 머문 공간과 행동도 함께 보자.'
+    : avgWith <= avgWithout ? '이번 기록에서 돈을 쓴 휴식이 더 높았던 건 아니었다.'
+      : '이번에는 돈을 쓴 휴식도 높았다. 그때 공간과 행동도 함께 보자.';
   const wrap = document.createElement('div');
   wrap.className = 'scene result';
+  wrap.innerHTML = `<div class="result-title">오늘 머문 곳</div><p class="result-note">${visits.length || new Set(rested.map(record => record.visitId)).size}곳 방문 · ${rested.length}번 쉼${ctx.currentTime !== undefined ? ` · ${formatTime(ctx.currentTime)} 여행 마침` : ''}</p>
+    ${rested.length ? `<div class="result-chart" tabindex="0" aria-label="휴식 기록 가로 스크롤">${chart}</div>` : '<p class="result-observation">오늘은 쉼 없이 여행했다. 지나온 길은 아래에 남아 있다.</p>'}
+    ${timeSvg}<div class="timeline-legend"><span>이동</span><span>식사</span><span>쉼</span><span class="event-legend">여행 중 만난 일</span></div>
+    ${eventRecords.length ? `<div class="journey-record"><strong>여행에서 만난 것</strong><ul>${eventRecords.map(event => `<li>${event.turn}번째 장소로 가는 길 · ${event.description}${event.type === 'purchase' ? ` · −${money(event.spend)}` : ''}</li>`).join('')}</ul></div>` : ''}
+    <div class="result-avg">돈을 쓴 휴식 평균 <strong>${avgWith?.toFixed(1) ?? '-'}</strong> / 돈을 안 쓴 휴식 평균 <strong>${avgWithout?.toFixed(1) ?? '-'}</strong></div>
+    <div class="result-comparison">${comparison}</div><p class="result-note">막대는 이번 쉼의 마음 환기(만족감), 주황색 점은 지출이다. 몸의 회복과는 다르며, 연속 휴식으로 낮아질 수 있다. 식사·구매는 휴식 비교에서 제외했다.</p>
+    <div class="record-detail" aria-live="polite">${rested.length ? '막대를 누르면 지나온 길과 그 쉼의 기록을 볼 수 있다.' : '남겨진 휴식 기록이 없다.'}</div>
+    <div class="result-highlights">${highlights.map(item => `<button class="highlight-button" data-rest-id="${item.restId}">${item.label}<span>${item.record.card.name} · ${ACTIONS[item.record.action].name} · ${item.record.restMinutes}분</span></button>`).join('')}</div>`;
 
-  const avgWithStr = avgWith !== null ? avgWith.toFixed(1) : '-';
-  const avgWithoutStr = avgWithout !== null ? avgWithout.toFixed(1) : '-';
-  const journeyEvents = eventRecords.map(event => {
-    const spend = event.type === 'purchase' ? ` · −¥${event.spend.toLocaleString()}` : '';
-    return `<li>${event.turn}턴 · ${event.description}${spend}</li>`;
-  }).join('');
-
-  wrap.innerHTML = `
-    <div class="result-title">기록</div>
-    ${svg}
-    ${timelineSvg}
-    ${hasTime ? '<div class="timeline-legend"><span>이동</span><span>식사</span><span>쉼</span><span>지나침</span><span>여행 중 만난 일</span></div>' : ''}
-    ${journeyEvents ? `<div class="journey-record"><strong>여행에서 만난 것</strong><ul>${journeyEvents}</ul></div>` : ''}
-    <div class="result-avg">
-      돈을 쓴 휴식 평균 <strong>${avgWithStr}</strong> / 돈을 안 쓴 휴식 평균 <strong>${avgWithoutStr}</strong>
-    </div>
-    <div class="result-comparison">${comparisonMsg}</div>
-    <div class="result-note">● 시야가 넓을수록 열림 · ▲ 숫자는 행동의 주도성 · 식사는 비교에서 제외했다.</div>
-    <div class="result-observation">${observation}</div>
-    <div class="record-detail" aria-live="polite">막대를 누르면 그 턴의 변화 기록을 다시 볼 수 있다.</div>
-    ${highlightComment ? `<div class="result-highlight-comment">${highlightComment}</div>` : ''}
-  `;
-
-  wrap.querySelectorAll('.result-bar').forEach(bar => {
-    bar.addEventListener('click', () => {
-      const record = records.find(entry => entry.turn === Number(bar.dataset.turn));
-      const detail = wrap.querySelector('.record-detail');
-      const meal = mealRecords.find(entry => entry.turn === record.turn);
-      const journey = record.card.journey || { route: '다음 장소를 향해 걸었다.', sight: '바람이 곁을 스쳤다.' };
-      const events = eventRecords.filter(event => event.turn === record.turn);
-      const timeStr = record.arrivalTime ? `${formatTime(record.arrivalTime)} 도착 · ` : '';
-      const mealStr = meal ? `식사 ${meal.endTime - meal.startTime}분 · ` : '';
-      const restStr = record.restMinutes ? ` · ${record.restMinutes}분` : '';
-      const eventStr = events.length ? ` · ${events.map(event => event.type === 'purchase' ? `${event.description} (−¥${event.spend.toLocaleString()})` : event.description).join(' · ')}` : '';
-      detail.textContent = `${record.turn}턴 · ${record.walkMinutes || 0}분 걸음 · ${journey.route} ${journey.sight} · ${timeStr}${mealStr}${record.card.name} · ${actionName(record.action)}${restStr}${eventStr} · 통증 ${record.painRecovered ? `−${record.painRecovered}` : `+${record.painAfter - record.painBefore}`} · 의지 ${signed(record.driveDelta)}`;
+  const listeners = [];
+  const on = (el, type, fn) => { el.addEventListener(type, fn); listeners.push({ el, type, fn }); };
+  const showDetail = restId => {
+    const record = rested.find(entry => entry.restId === restId);
+    wrap.querySelector('.record-detail').textContent = describeRest(record, ctx);
+  };
+  wrap.querySelectorAll('[data-rest-id]').forEach(element => {
+    on(element, 'click', () => showDetail(element.dataset.restId));
+    if (element.classList.contains('result-bar')) on(element, 'keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); showDetail(element.dataset.restId); }
     });
   });
+  const button = document.createElement('button'); button.className = 'btn'; button.textContent = '다시 여행하기';
+  on(button, 'click', () => window.location.reload()); wrap.appendChild(button); app.appendChild(wrap);
 
-  const btn = document.createElement('button');
-  btn.className = 'btn';
-  btn.textContent = '다시 하기';
-  btn.addEventListener('click', () => {
-    window.location.reload();
-  });
-  wrap.appendChild(btn);
-
-  app.appendChild(wrap);
-  return null;
+  return () => {
+    listeners.forEach(({ el, type, fn }) => el.removeEventListener(type, fn));
+  };
 }

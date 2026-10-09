@@ -11,8 +11,8 @@ test('식사는 휴식 행동이 아니며 예산만 바꾼다', () => {
 });
 
 test('식사 선택은 타임라인에 쓸 체류 시간을 가진다', () => {
-  assert.equal(MEAL_OPTIONS.bench.minutes, 20);
-  assert.equal(MEAL_OPTIONS.indoor.minutes, 30);
+  assert.equal(MEAL_OPTIONS.bench.minutes, 30);
+  assert.equal(MEAL_OPTIONS.indoor.minutes, 60);
 });
 
 test('시간 구간은 시작 시각과 분 단위 길이로 연속 기록된다', () => {
