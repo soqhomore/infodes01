@@ -569,10 +569,15 @@ html, body {
 .scene[class*="day-phase-"] .journey-stage { background: var(--sky); color: var(--ink); }
 .scene[class*="day-phase-"] .stat-label { width: 76px; flex-shrink: 0; }
 .scene[class*="day-phase-"] .turn-info { width: min(100%, 340px); }
-.duration-panel { width: min(100%, 330px); text-align: center; display: grid; gap: 10px; }
-.duration-panel:empty { display: none; }
+.choice-detail { display: block; margin-top: 6px; font-size: 12px; font-weight: 400; line-height: 1.5; }
+.rest-summary { padding: 12px 16px; }
+.rest-changes { margin: 8px 0; font-weight: 600; }
+.rest-choices .btn-rest-decision { width: 100%; min-height: 76px; padding: 12px 16px; text-align: left; }
+.rest-secondary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.rest-secondary .btn { padding: 10px 8px; font-size: 13px; }
+.rest-context { width: min(100%, 330px); line-height: 1.5; text-align: center; }
+.rest-context:empty { display: none; }
 .overstay-warning { font-size: 13px; line-height: 1.5; color: #a14d36; }
-.selected-action { background: #d9eaf1; }
 .day-phase-night .day-clock, .day-phase-night .day-clock strong,
 .day-phase-night .stat-budget, .day-phase-night .pressure-copy,
 .day-phase-night .journey-meta, .day-phase-night .journey-sight,
@@ -580,7 +585,6 @@ html, body {
 .day-phase-night .turn-log { color: #d0deeb; }
 .day-phase-night .btn { background: #263d54; color: #edf4fa; border-color: #9ab6cb; }
 .day-phase-night .btn:disabled { opacity: .5; }
-.day-phase-night .selected-action { background: #345675; }
 .day-phase-night .btn-return { border-color: transparent; }
 .day-phase-night .rest-advice { background: #29435d; color: #e6f0f8; }
 .day-phase-night .overstay-warning { color: #f4c29a; }
