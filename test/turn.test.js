@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { SceneElement } from './helpers/scene-dom.js';
 import { createDay } from '../src/day.js';
 import { createRng } from '../src/rng.js';
+import { createDeck } from '../src/deck.js';
 import { SCENE_TIMING, DAY_END } from '../src/state.js';
 
 globalThis.window = { location: { search: '' } };
@@ -20,6 +21,10 @@ function start(t, overrides = {}) {
   t.after(cleanup);
   const wrap = app.children[0];
   wrap.click();
+  if (wrap.querySelector('.event-box')) {
+    wrap.button('계속한다').click();
+    t.mock.timers.tick(SCENE_TIMING.outcome);
+  }
   wrap.querySelector('.turn-info').click();
   return { wrap, cleanup, state: () => nextState };
 }
@@ -96,7 +101,7 @@ test('유료 휴식 뒤 예산이 부족하면 추가 휴식을 막고 비용 �
   wrap.button('디저트').click();
   const extend = wrap.button('30분 더 쉬기');
   assert.equal(extend.disabled, true);
-  assert.match(extend.textContent, /¥600~¥1,200/);
+  assert.match(wrap.innerHTML, /¥600~¥1,200/);
   assert.equal(extend.children[0].textContent, '돈이 부족하다');
   extend.click();
   wrap.button('돌아간다').click();
@@ -108,9 +113,8 @@ test('추가 휴식 예측은 포화와 체류 부담을 반영하고 행동 변
   wrap.button('스마트폰').click();
   wrap.button('30분 더 쉬기').click();
   t.mock.timers.tick(SCENE_TIMING.outcome);
-  const extend = wrap.button('30분 더 쉬기');
-  assert.match(extend.children[0].textContent, /마음 여유 약 -4/);
-  assert.match(wrap.querySelector('.rest-context').innerHTML, /위 예상 변화에 포함/);
+  assert.match(wrap.innerHTML, /예상 마음 변화<\/dt><dd>약 -4/);
+  assert.match(wrap.innerHTML, /위 예상 마음 변화에 이미 포함/);
   wrap.button('다른 행동으로 쉬기').click();
   wrap.button('잡담').click();
   wrap.button('먼저 말한다').click();
@@ -129,4 +133,66 @@ test('추가 휴식 중 씬을 정리하면 타이머와 이전 버튼이 결과
   skip.click();
   t.mock.timers.tick(SCENE_TIMING.outcome);
   assert.equal(wrap.innerHTML, pending);
+});
+
+
+test('비교 화면의 추가 휴식 예상은 실제 결과와 같고 화면 재진입은 덱·RNG·상태를 소비하지 않는다', t => {
+  const rng = createRng(123);
+  const referenceRng = createRng(123);
+  const deck = createDeck('city', rng);
+  createDeck('city', referenceRng);
+  const initial = { ...createDay(), pain: 30, painExact: 30 };
+  const before = structuredClone(initial);
+  const { wrap, state } = start(t, { ...initial, rng, deck });
+  wrap.button('스마트폰').click();
+  assert.match(wrap.innerHTML, /추가 비용 없음/);
+  assert.match(wrap.innerHTML, /예상 통증 감소<\/dt><dd>약 8/);
+  assert.match(wrap.innerHTML, /예상 마음 변화/);
+  const remaining = structuredClone(deck.remaining());
+  wrap.button('다른 행동으로 쉬기').click();
+  wrap.button('휴식 결과로 돌아가기').click();
+  t.mock.timers.tick(SCENE_TIMING.journey + SCENE_TIMING.outcome);
+  assert.deepEqual(deck.remaining(), remaining);
+  assert.equal(rng.random(), referenceRng.random());
+  assert.deepEqual(initial, before);
+  wrap.button('30분 더 쉬기').click();
+  wrap.button('넘기기').click();
+  wrap.button('돌아간다').click();
+  assert.equal(state().records.length, 2);
+  assert.equal(state().records[1].painRecovered, 8);
+  assert.equal(state().records[1].startTime, state().records[0].endTime);
+});
+
+test('비 뒤 다음 풍경은 낮아진 시야를 예고하고 이동도 그 시야로 도착한다', t => {
+  const rng = createRng(123);
+  const deck = createDeck('beach', rng);
+  deck.promoteWidest();
+  const { wrap, state } = start(t, { rng, deck, visits: [{ visitId: 'visit-1' }], eventSlots: { negative: 2 } });
+  deck.promoteWidest();
+  wrap.button('스마트폰').click();
+  assert.match(wrap.innerHTML, /다음 장소/);
+  assert.match(wrap.innerHTML, /rest-move-preview[\s\S]*view-mid/);
+  assert.match(wrap.innerHTML, /--view-width:70%/);
+  wrap.button('다음 장소로 가기').click();
+  const nextApp = new SceneElement();
+  const cleanup = showTurn(nextApp, state(), () => {});
+  t.after(cleanup);
+  nextApp.children[0].click();
+  assert.match(nextApp.children[0].innerHTML, /view-mid/);
+});
+
+test('마지막 장소에서는 비교 화면에 덱 소진을 설명하고 추가 휴식·귀환을 유지한다', t => {
+  const rng = createRng(123);
+  const deck = createDeck('city', rng);
+  while (deck.remaining().length > 1) deck.draw();
+  const { wrap, state } = start(t, { rng, deck });
+  wrap.button('스마트폰').click();
+  assert.match(wrap.innerHTML, /이 길의 장소를 모두 둘러봤어요/);
+  assert.equal(wrap.button('다음 장소로 가기').disabled, true);
+  assert.equal(wrap.button('30분 더 쉬기').disabled, false);
+  wrap.button('30분 더 쉬기').click();
+  wrap.button('넘기기').click();
+  wrap.button('돌아간다').click();
+  assert.equal(state().records.length, 2);
+  assert.equal(state().endReason, 'returned');
 });

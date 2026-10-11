@@ -57,17 +57,16 @@ export function showTurn(app, ctx, goto) {
       <div class="stat-budget">${budgetText(state.budget)}${changes.budget ? ` <span class="delta-budget">−${budgetText(-changes.budget)}</span>` : ''}</div></div>`;
   }
 
-  function placeHTML() {
-    const card = state.currentCard;
-    return `<div class="place-stage view-${card.view}"><div class="place-density density-${card.view}"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="place-window" style="--view-width:${VIEW_CLIP[card.view]}%"><div class="place-landscape">${fishSVG()}<span class="place-horizon"></span></div></div><div class="place-caption"><strong>${card.name}</strong><span>${card.indoor ? '실내' : '실외'} · ${viewText(card.view)}</span></div></div>`;
+  function placeHTML(card = state.currentCard, { showFish = true } = {}) {
+    return `<div class="place-stage view-${card.view}"><div class="place-density density-${card.view}"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="place-window" style="--view-width:${VIEW_CLIP[card.view]}%"><div class="place-landscape">${showFish ? fishSVG() : ''}<span class="place-horizon"></span></div></div><div class="place-caption"><strong>${card.name}</strong><span>${card.indoor ? '실내' : '실외'} · ${viewText(card.view)}</span></div></div>`;
   }
 
-  function render(body, { journey = false, changes = {} } = {}) {
+  function render(body, { journey = false, comparison = false, changes = {} } = {}) {
     clearPhase(); locked = false;
     const visit = state.visits.at(-1);
     const route = state.currentCard.journey;
-    const stage = journey ? `<div class="journey-stage"><div class="journey-meta">${formatTime(visit.walkStartTime)} → ${formatTime(visit.arrivalTime)} · ${visit.walkMinutes}분 걸음</div><div class="journey-line"><span></span></div><p class="journey-route">${route.route}</p><p class="journey-sight">${route.sight}</p></div>` : placeHTML();
-    wrap.className = `scene turn day-phase-${getDayPhase(state.currentTime).id}`;
+    const stage = comparison ? '' : journey ? `<div class="journey-stage"><div class="journey-meta">${formatTime(visit.walkStartTime)} → ${formatTime(visit.arrivalTime)} · ${visit.walkMinutes}분 걸음</div><div class="journey-line"><span></span></div><p class="journey-route">${route.route}</p><p class="journey-sight">${route.sight}</p></div>` : placeHTML();
+    wrap.className = `scene turn day-phase-${getDayPhase(state.currentTime).id}${comparison ? ' rest-comparison-screen' : ''}`;
     wrap.innerHTML = `${daylightHTML(state.currentTime)}${statsHTML(changes)}${stage}${body}`;
     updateDebug('방문', state.visits.length);
     updateDebug('쉼', state.records.length);
@@ -187,30 +186,62 @@ export function showTurn(app, ctx, goto) {
 
   function showRestDecision() {
     const record = lastRest;
-    const reason = record.overstayMinutes > 0 ? '몸이 충분히 쉰 뒤에도 머물러 마음에 체류 부담이 생겼다.'
-      : record.reasons.mentalFactor < 1 ? '쉬어 온 시간이 쌓여 마음의 추가 회복 효과가 줄었다.'
-      : '몸의 회복과 마음의 환기는 서로 다를 수 있다.';
-    render(`<div class="outcome-panel rest-summary" role="status"><strong>${REST_MINUTES}분 쉬었어요</strong><p>${ACTIONS[record.action].name} · ${formatTime(record.startTime)} → ${formatTime(record.endTime)}</p><div class="rest-changes"><p>통증 ${record.painBefore} → ${record.painAfter} <small>(${signed(record.painAfter - record.painBefore)})</small></p><p>마음의 여유 ${record.driveBefore} → ${record.driveAfter} <small>(${signed(record.driveDelta)})</small></p></div><small>${reason}<br>이번 쉼의 마음 환기 ${record.satisfaction}/10${record.spend ? `<br>이번 지출 ${budgetText(record.spend)}` : ''}</small></div><div class="turn-info"><p class="action-prompt">지금은 더 쉬고 싶어, 다른 풍경을 보고 싶어?</p></div><div class="day-choices rest-choices"></div><div class="rest-context"></div><div class="day-choices rest-secondary"></div>`);
-    const choices = wrap.querySelector('.rest-choices');
-    const secondary = wrap.querySelector('.rest-secondary');
-    if (isMealDue(state)) {
-      addButton(choices, '식사하기', showMeal, { detail: '점심때가 됐다. 다음 선택 전에 식사한다.' });
-    } else {
-      const option = getRestOptions(state, record.action)[0];
+    const mealDue = isMealDue(state);
+    const reason = record.overstayMinutes > 0 ? '몸이 충분히 쉰 뒤에도 머물러 마음에 체류 부담이 생겼어요.'
+      : record.reasons.mentalFactor < 1 ? '쉬어 온 시간이 쌓여 마음의 추가 회복 효과가 줄었어요.'
+      : '몸의 회복과 마음의 환기는 서로 다를 수 있어요.';
+    const summary = `<div class="outcome-panel rest-summary" role="status"><strong>${REST_MINUTES}분 쉬었어요</strong>
+      <p>${ACTIONS[record.action].name} · ${formatTime(record.startTime)} → ${formatTime(record.endTime)}</p>
+      <div class="rest-changes"><p>몸 · 통증 ${record.painBefore} → ${record.painAfter} <small>(${signed(record.painAfter - record.painBefore)})</small></p>
+      <p>마음 · 여유 ${record.driveBefore} → ${record.driveAfter} <small>(${signed(record.driveDelta)})</small></p></div>
+      <p class="rest-reflection">이번 쉼의 마음 환기 <strong>${record.satisfaction}/10</strong><small>이 쉼에서 느낀 환기 정도예요. 몸 회복량이나 마음의 여유 변화량과는 달라요.</small></p>
+      <p class="rest-spend">이번 지출 ${budgetText(record.spend)}</p><small>${reason}</small></div>`;
+    let comparison = '';
+    let option;
+    let move;
+    if (!mealDue) {
+      option = getRestOptions(state, record.action)[0];
       const prediction = predictRest({ ...state, actionId: record.action, card: state.currentCard, minutes: REST_MINUTES });
-      addButton(choices, `${REST_MINUTES}분 더 쉬기${spendCopy(record.action)}`, () => continueRest(record.action), {
-        disabled: !option.available, className: 'btn-rest-decision',
-        detail: option.available ? `${formatTime(state.currentTime + REST_MINUTES)}까지 · 통증 약 −${prediction.painRecovered} · 마음 여유 약 ${signed(prediction.driveDelta)}` : option.reason,
-      });
-      addMoveButton(choices, 'btn-rest-decision');
-      if (option.available && prediction.overstayMinutes > 0) {
-        wrap.querySelector('.rest-context').innerHTML = `<p class="overstay-warning">추가 휴식 중 약 ${prediction.overstayMinutes.toFixed(0)}분은 몸이 충분히 쉰 뒤의 체류다. 마음 부담 −${prediction.overstayDriveCost.toFixed(1)}은 위 예상 변화에 포함돼 있다.</p>`;
-      } else if (option.available && prediction.mentalFactor < 1) {
-        wrap.querySelector('.rest-context').innerHTML = '<p class="pressure-copy">쉬어 온 시간이 쌓여 추가 휴식의 마음 회복 효과는 줄어든다.</p>';
-      }
-      addButton(secondary, '다른 행동으로 쉬기', showActions, { className: 'btn-return' });
+      const next = state.deck.peek();
+      move = getMoveOption(state, next);
+      const preview = next && { ...next, view: state.rainNextTurn ? downgradeView(next.view) : next.view };
+      const range = ACTIONS[record.action].spendRange;
+      const cost = range ? `${budgetText(range[0])}~${budgetText(range[1])}` : '추가 비용 없음';
+      const context = option.available && prediction.overstayMinutes > 0
+        ? `<p class="overstay-warning">추가 휴식 중 약 ${prediction.overstayMinutes.toFixed(0)}분은 몸이 충분히 쉰 뒤의 체류예요. 마음 부담 −${prediction.overstayDriveCost.toFixed(1)}은 위 예상 마음 변화에 이미 포함돼 있어요.</p>`
+        : option.available && prediction.mentalFactor < 1
+          ? '<p class="pressure-copy">쉬어 온 시간이 쌓여 추가 휴식의 마음 회복 효과는 줄어들어요.</p>' : '';
+      comparison = `<div class="day-choices rest-choices" aria-label="더 쉬기와 다음 장소 비교">
+        <section class="rest-choice rest-stay" aria-labelledby="rest-stay-title">
+          <h3 id="rest-stay-title">여기서 더 쉬면</h3><div class="rest-stay-preview">${placeHTML()}</div>
+          <p class="rest-choice-action">${ACTIONS[record.action].name} · ${REST_MINUTES}분 더 머물기</p>
+          <dl class="rest-forecast"><dt>예상 통증 감소</dt><dd>약 ${prediction.painRecovered}</dd>
+          <dt>예상 마음 변화</dt><dd>약 ${signed(prediction.driveDelta)}</dd>
+          <dt>종료 시각</dt><dd>${option.available ? formatTime(state.currentTime + REST_MINUTES) : '지금은 선택할 수 없어요'}</dd>
+          <dt>추가 비용</dt><dd>${cost}</dd></dl>
+          <div class="rest-context">${context}</div><div class="rest-stay-control"></div>
+        </section>
+        <section class="rest-choice rest-move" aria-labelledby="rest-move-title">
+          <h3 id="rest-move-title">다음 풍경으로 가면</h3><p class="rest-choice-action">다음 장소</p>
+          <div class="rest-move-preview">${preview ? placeHTML(preview, { showFish: false }) : '<p class="rest-path-end">이 길의 장소를 모두 둘러봤어요.</p>'}</div>
+          ${preview ? `<dl class="rest-forecast"><dt>시야</dt><dd>${viewText(preview.view)}</dd><dt>이동 시간</dt><dd>${getJourneyMinutes(next)}분</dd></dl><p class="rest-choice-note">지금의 풍경을 떠나 다음 장소로 걸어가요.</p>` : '<p class="rest-choice-note">남은 시간에는 여기서 쉬거나 여행을 마칠 수 있어요.</p>'}
+          <div class="rest-move-control"></div>
+        </section></div>`;
     }
-    addButton(secondary, '돌아간다', () => leave(showEnding, returnFromDay(state)), { className: 'btn-return' });
+    render(`${summary}<div class="turn-info"><p class="action-prompt">${mealDue ? '점심때가 됐어요. 먼저 식사할까요?' : '더 쉬고 싶어, 다른 풍경을 보고 싶어?'}</p></div>
+      ${mealDue ? '<div class="day-choices rest-meal-choice"></div>' : comparison}<div class="day-choices rest-secondary"></div>`, { comparison: true });
+    if (mealDue) {
+      addButton(wrap.querySelector('.rest-meal-choice'), '식사하기', showMeal, { detail: '다음 선택 전에 식사해요.' });
+    } else {
+      addButton(wrap.querySelector('.rest-stay-control'), `${REST_MINUTES}분 더 쉬기`, () => continueRest(record.action), {
+        disabled: !option.available, className: 'btn-rest-decision', detail: option.reason,
+      });
+      addButton(wrap.querySelector('.rest-move-control'), '다음 장소로 가기', () => leave(showTurn), {
+        disabled: !move.available, className: 'btn-rest-decision', detail: move.reason,
+      });
+      addButton(wrap.querySelector('.rest-secondary'), '다른 행동으로 쉬기', showActions, { className: 'btn-return' });
+    }
+    addButton(wrap.querySelector('.rest-secondary'), '돌아간다', () => leave(showEnding, returnFromDay(state)), { className: 'btn-return' });
   }
 
   function continueRest(id) {

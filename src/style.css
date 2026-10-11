@@ -599,3 +599,53 @@ html, body {
   .journey-line span { animation: none; }
   .stat-fill, #app { transition: none; }
 }
+
+/* 휴식 뒤: 방금의 결과와 다음 선택의 예상을 분리한다. */
+.rest-comparison-screen .rest-summary,
+.scene.rest-comparison-screen .turn-info,
+.rest-comparison-screen .rest-choices {
+  width: min(100%, 680px);
+}
+.rest-comparison-screen .rest-summary { text-align: left; }
+.rest-comparison-screen .rest-changes { display: grid; gap: 4px; }
+.rest-reflection { border-top: 1px solid #9db6c7; padding-top: 8px; }
+.rest-reflection strong { font-size: 16px; }
+.rest-reflection small { display: block; margin-top: 3px; }
+.rest-spend { margin: 7px 0; font-size: 13px; }
+.rest-comparison-screen .turn-info { text-align: center; }
+.rest-comparison-screen .rest-choices { gap: 14px; }
+.rest-choice {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #9db6c7;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  text-align: left;
+}
+.rest-choice h3 { font-size: 17px; line-height: 1.4; }
+.rest-choice-action, .rest-choice-note { font-size: 13px; line-height: 1.5; }
+.rest-choice .place-stage { width: 100%; min-height: 115px; }
+.rest-choice .place-window { height: 76px; }
+.rest-choice .place-landscape { min-width: 280px; }
+.rest-choice .place-fish { width: 54px; height: 36px; top: 22px; }
+.rest-choice .place-caption { flex-wrap: wrap; gap: 4px 8px; line-height: 1.5; }
+.rest-forecast { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px; font-size: 13px; line-height: 1.5; }
+.rest-forecast dt { font-weight: 400; }
+.rest-forecast dd { font-weight: 600; text-align: right; }
+.rest-choice .rest-context { width: 100%; text-align: left; }
+.rest-stay-control, .rest-move-control { margin-top: auto; padding-top: 4px; }
+.rest-choices .btn-rest-decision { min-height: 48px; text-align: center; }
+.rest-path-end { min-height: 115px; display: flex; align-items: center; line-height: 1.6; }
+.rest-choice .btn:focus-visible,
+.rest-comparison-screen .rest-secondary .btn:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+@media (min-width: 640px) {
+  .rest-comparison-screen .rest-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rest-comparison-screen .rest-changes { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+}
