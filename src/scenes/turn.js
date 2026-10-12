@@ -1,5 +1,5 @@
 /** 이동 → 사건 → 도착 → 머물기 / 다음 장소 / 돌아가기 */
-import { ACTIONS, DAY_END, MEAL_OPTIONS, VIEW_CLIP, STAY_OPTIONS, formatTime, predictRest, getJourneyMinutes, getDayPhase, SCENE_TIMING } from '../state.js';
+import { ACTIONS, DAY_END, MEAL_OPTIONS, VIEW_CLIP, STAY_OPTIONS, formatTime, predictRest, getJourneyMinutes, getDayPhase, SCENE_TIMING, getFishAppearance } from '../state.js';
 import { daylightHTML } from '../daylight.js';
 import {
   moveToPlace, restAtPlace, eatMeal, resolveJourneyEvent, returnFromDay,
@@ -58,7 +58,12 @@ export function showTurn(app, ctx, goto) {
   }
 
   function placeHTML(card = state.currentCard, { showFish = true } = {}) {
-    return `<div class="place-stage view-${card.view}"><div class="place-density density-${card.view}"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="place-window" style="--view-width:${VIEW_CLIP[card.view]}%"><div class="place-landscape">${showFish ? fishSVG() : ''}<span class="place-horizon"></span></div></div><div class="place-caption"><strong>${card.name}</strong><span>${card.indoor ? '실내' : '실외'} · ${viewText(card.view)}</span></div></div>`;
+    let fish = '';
+    if (showFish) {
+      const appearance = getFishAppearance(state);
+      fish = `<span class="fish-swim" style="--fish-drop:${appearance.dropPx}px;--fish-tilt:${appearance.tiltDeg}deg;--fish-swim:${appearance.swimPx}px;--fish-duration:${appearance.swimSeconds}s"><span class="fish-posture">${fishSVG()}</span></span>`;
+    }
+    return `<div class="place-stage view-${card.view}"><div class="place-density density-${card.view}"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="place-window" style="--view-width:${VIEW_CLIP[card.view]}%"><div class="place-landscape">${fish}<span class="place-horizon"></span></div></div><div class="place-caption"><strong>${card.name}</strong><span>${card.indoor ? '실내' : '실외'} · ${viewText(card.view)}</span></div>${showFish ? `<p class="fish-state">몸: 통증 ${state.pain} · 마음: 여유 ${state.drive}</p>` : ''}</div>`;
   }
 
   function render(body, { journey = false, comparison = false, changes = {} } = {}) {
@@ -187,15 +192,15 @@ export function showTurn(app, ctx, goto) {
   function showRestDecision() {
     const record = lastRest;
     const mealDue = isMealDue(state);
-    const reason = record.overstayMinutes > 0 ? '몸이 충분히 쉰 뒤에도 머물러 마음에 체류 부담이 생겼어요.'
-      : record.reasons.mentalFactor < 1 ? '쉬어 온 시간이 쌓여 마음의 추가 회복 효과가 줄었어요.'
-      : '몸의 회복과 마음의 환기는 서로 다를 수 있어요.';
+    const reason = record.overstayMinutes > 0 ? '충분히 쉰 뒤에도 머물렀어요.'
+      : record.reasons.mentalFactor < 1 ? '쉬는 시간이 쌓여 마음 회복이 줄었어요.' : '';
     const summary = `<div class="outcome-panel rest-summary" role="status"><strong>${REST_MINUTES}분 쉬었어요</strong>
       <p>${ACTIONS[record.action].name} · ${formatTime(record.startTime)} → ${formatTime(record.endTime)}</p>
-      <div class="rest-changes"><p>몸 · 통증 ${record.painBefore} → ${record.painAfter} <small>(${signed(record.painAfter - record.painBefore)})</small></p>
-      <p>마음 · 여유 ${record.driveBefore} → ${record.driveAfter} <small>(${signed(record.driveDelta)})</small></p></div>
-      <p class="rest-reflection">이번 쉼의 마음 환기 <strong>${record.satisfaction}/10</strong><small>이 쉼에서 느낀 환기 정도예요. 몸 회복량이나 마음의 여유 변화량과는 달라요.</small></p>
-      <p class="rest-spend">이번 지출 ${budgetText(record.spend)}</p><small>${reason}</small></div>`;
+      <div class="rest-changes"><p>통증 ${record.painBefore} → ${record.painAfter}</p>
+      <p>마음 여유 ${record.driveBefore} → ${record.driveAfter}</p></div>
+      <p class="rest-spend">${record.spend ? `지출 ${budgetText(record.spend)}` : '지출 없음'}</p>
+      <details class="rest-details"><summary>자세히</summary><p>마음 환기 ${record.satisfaction}/10</p>
+      <p>이 쉼의 마음 환기예요. 몸 회복과는 달라요.</p>${reason ? `<p>${reason}</p>` : ''}</details></div>`;
     let comparison = '';
     let option;
     let move;
@@ -208,23 +213,23 @@ export function showTurn(app, ctx, goto) {
       const range = ACTIONS[record.action].spendRange;
       const cost = range ? `${budgetText(range[0])}~${budgetText(range[1])}` : '추가 비용 없음';
       const context = option.available && prediction.overstayMinutes > 0
-        ? `<p class="overstay-warning">추가 휴식 중 약 ${prediction.overstayMinutes.toFixed(0)}분은 몸이 충분히 쉰 뒤의 체류예요. 마음 부담 −${prediction.overstayDriveCost.toFixed(1)}은 위 예상 마음 변화에 이미 포함돼 있어요.</p>`
+        ? `<p class="overstay-warning">더 머물면 마음이 지칠 수 있어요. 예상 변화에 포함됐어요.</p><details class="rest-details"><summary>자세히</summary><p>충분히 쉰 뒤의 체류 약 ${prediction.overstayMinutes.toFixed(0)}분</p><p>마음 부담 −${prediction.overstayDriveCost.toFixed(1)} · 위 예상 마음 변화에 이미 포함</p></details>`
         : option.available && prediction.mentalFactor < 1
-          ? '<p class="pressure-copy">쉬어 온 시간이 쌓여 추가 휴식의 마음 회복 효과는 줄어들어요.</p>' : '';
+          ? '<p class="pressure-copy">더 쉬어도 마음은 덜 회복돼요.</p>' : '';
       comparison = `<div class="day-choices rest-choices" aria-label="더 쉬기와 다음 장소 비교">
         <section class="rest-choice rest-stay" aria-labelledby="rest-stay-title">
           <h3 id="rest-stay-title">여기서 더 쉬면</h3><div class="rest-stay-preview">${placeHTML()}</div>
           <p class="rest-choice-action">${ACTIONS[record.action].name} · ${REST_MINUTES}분 더 머물기</p>
           <dl class="rest-forecast"><dt>예상 통증 감소</dt><dd>약 ${prediction.painRecovered}</dd>
           <dt>예상 마음 변화</dt><dd>약 ${signed(prediction.driveDelta)}</dd>
-          <dt>종료 시각</dt><dd>${option.available ? formatTime(state.currentTime + REST_MINUTES) : '지금은 선택할 수 없어요'}</dd>
+          <dt>종료 시각</dt><dd>${option.available ? formatTime(state.currentTime + REST_MINUTES) : '선택 불가'}</dd>
           <dt>추가 비용</dt><dd>${cost}</dd></dl>
           <div class="rest-context">${context}</div><div class="rest-stay-control"></div>
         </section>
         <section class="rest-choice rest-move" aria-labelledby="rest-move-title">
           <h3 id="rest-move-title">다음 풍경으로 가면</h3><p class="rest-choice-action">다음 장소</p>
           <div class="rest-move-preview">${preview ? placeHTML(preview, { showFish: false }) : '<p class="rest-path-end">이 길의 장소를 모두 둘러봤어요.</p>'}</div>
-          ${preview ? `<dl class="rest-forecast"><dt>시야</dt><dd>${viewText(preview.view)}</dd><dt>이동 시간</dt><dd>${getJourneyMinutes(next)}분</dd></dl><p class="rest-choice-note">지금의 풍경을 떠나 다음 장소로 걸어가요.</p>` : '<p class="rest-choice-note">남은 시간에는 여기서 쉬거나 여행을 마칠 수 있어요.</p>'}
+          ${preview ? `<dl class="rest-forecast"><dt>시야</dt><dd>${viewText(preview.view)}</dd><dt>이동 시간</dt><dd>${getJourneyMinutes(next)}분</dd></dl>` : '<p class="rest-choice-note">여기서 쉬거나 돌아갈 수 있어요.</p>'}
           <div class="rest-move-control"></div>
         </section></div>`;
     }

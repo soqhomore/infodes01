@@ -27,3 +27,27 @@ test('한정 디저트 구매는 예산만 줄이고 휴식 수치를 바꾸지 
 
   assert.deepEqual(result, { budget: 2500 });
 });
+
+
+test('개복치 표시에서 통증은 자세만, 마음은 유영만 바꾸고 원본 상태는 유지한다', async () => {
+  const { getFishAppearance } = await import('../src/state.js');
+  const state = Object.freeze({ pain: 20, drive: 20, budget: 8000 });
+  const calm = getFishAppearance(state);
+  const sore = getFishAppearance({ ...state, pain: 80 });
+  const lively = getFishAppearance({ ...state, drive: 80 });
+  assert.ok(sore.dropPx > calm.dropPx);
+  assert.ok(sore.tiltDeg > calm.tiltDeg);
+  assert.equal(sore.swimPx, calm.swimPx);
+  assert.equal(sore.swimSeconds, calm.swimSeconds);
+  assert.equal(lively.dropPx, calm.dropPx);
+  assert.equal(lively.tiltDeg, calm.tiltDeg);
+  assert.ok(lively.swimPx > calm.swimPx);
+  assert.ok(lively.swimSeconds < calm.swimSeconds);
+  assert.deepEqual(state, { pain: 20, drive: 20, budget: 8000 });
+});
+
+test('개복치 표시는 0과 100의 경계를 넘어도 표현 범위를 벗어나지 않는다', async () => {
+  const { getFishAppearance } = await import('../src/state.js');
+  assert.deepEqual(getFishAppearance({ pain: -20, drive: -20 }), getFishAppearance({ pain: 0, drive: 0 }));
+  assert.deepEqual(getFishAppearance({ pain: 120, drive: 120 }), getFishAppearance({ pain: 100, drive: 100 }));
+});

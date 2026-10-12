@@ -196,3 +196,21 @@ test('마지막 장소에서는 비교 화면에 덱 소진을 설명하고 추�
   assert.equal(state().records.length, 2);
   assert.equal(state().endReason, 'returned');
 });
+
+
+test('휴식 뒤 개복치는 회복한 현재 상태를 표시하고 자세히 설명은 다시 접힌다', t => {
+  const { wrap, state } = start(t);
+  assert.match(wrap.innerHTML, /몸: 통증 23 · 마음: 여유 42/);
+  wrap.button('스마트폰').click();
+  assert.match(wrap.innerHTML, /몸: 통증 15 · 마음: 여유 44/);
+  assert.match(wrap.innerHTML, /<details class="rest-details"><summary>자세히<\/summary>/);
+  assert.doesNotMatch(wrap.innerHTML, /<details[^>]*\bopen\b/);
+  const nextPreview = wrap.innerHTML.match(/<div class="rest-move-preview">([\s\S]*?)<dl class="rest-forecast">/)[1];
+  assert.doesNotMatch(nextPreview, /fish-swim|fish-state|place-fish/);
+  wrap.button('다른 행동으로 쉬기').click();
+  wrap.button('휴식 결과로 돌아가기').click();
+  assert.doesNotMatch(wrap.innerHTML, /<details[^>]*\bopen\b/);
+  wrap.button('돌아간다').click();
+  assert.equal(state().records.length, 1);
+  assert.equal(state().currentTime, 630);
+});

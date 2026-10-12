@@ -8,6 +8,24 @@ export const INITIAL_PAIN = 15;
 export const INITIAL_DRIVE = 45;
 export const INITIAL_BUDGET = 8000;
 
+// ── 표시 전용: 게임 효과·시간·행동 조건에는 사용하지 않는다 ──
+export const FISH_APPEARANCE = {
+  statMax: 100, maxDropPx: 8, maxTiltDeg: 14,
+  minSwimPx: 1, maxSwimPx: 4, slowSeconds: 6, fastSeconds: 3,
+};
+
+/** 몸은 자세, 마음은 유영으로 표현한다. 원본 상태는 변경하지 않는다. */
+export function getFishAppearance({ pain, drive }) {
+  const body = clampStat(pain) / FISH_APPEARANCE.statMax;
+  const mind = clampStat(drive) / FISH_APPEARANCE.statMax;
+  return {
+    dropPx: body * FISH_APPEARANCE.maxDropPx,
+    tiltDeg: body * FISH_APPEARANCE.maxTiltDeg,
+    swimPx: FISH_APPEARANCE.minSwimPx + mind * (FISH_APPEARANCE.maxSwimPx - FISH_APPEARANCE.minSwimPx),
+    swimSeconds: FISH_APPEARANCE.slowSeconds + mind * (FISH_APPEARANCE.fastSeconds - FISH_APPEARANCE.slowSeconds),
+  };
+}
+
 // ── 이동 시 통증 증가 (턴 1~7) ──
 export const MOVE_PAIN = [8, 9, 11, 12, 14, 16, 18];
 
