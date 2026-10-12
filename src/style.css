@@ -180,15 +180,17 @@ html, body {
 .journey-stage small { display: block; margin-top: 14px; color: #78919e; font-size: 11px; text-align: right; }
 @keyframes journey-pass { from { width: 8%; } to { width: 72%; } }
 .place-window { width: var(--view-width); height: 118px; position: relative; margin: 12px auto 0; overflow: hidden; border-radius: 58px 58px 12px 12px; transition: width .45s ease; box-shadow: 0 0 0 1px rgba(43,94,132,.15); }
+.beach-place .place-window { height: 176px; border-radius: 72px 72px 12px 12px; }
 .place-landscape { height: 100%; min-width: 340px; background: linear-gradient(#bfe3f2 0 56%, #84b98a 57%); position: relative; left: 50%; transform: translateX(-50%); }
-.place-horizon { position: absolute; height: 18px; left: 0; right: 0; bottom: 0; background: #6aa9c1; opacity: .55; }
+.place-landscape.landscape-beach { background: transparent; }
+.beach-cliff-art { position: absolute; inset: 0; }
+.beach-cliff-art svg { display: block; width: 100%; height: 100%; }
+.beach-cliff-art::after { content: ''; position: absolute; inset: 0; pointer-events: none; transition: background-color .6s ease; }
 .place-fish { width: 72px; height: 48px; position: absolute; left: 42%; top: 38px; z-index: 1; }
+.beach-place .fish-swim { left: calc(50% - 24px); top: 76px; width: 48px; height: 34px; }
 .place-caption { padding: 8px 14px 11px; display: flex; justify-content: space-between; font-size: 12px; position: relative; z-index: 2; }
 .place-caption span { color: #61717e; }
-.place-density { position: absolute; inset: 0; opacity: .55; }
-.place-density i { position: absolute; width: 12px; height: 28px; background: #a5b1bd; border-radius: 2px; }
-.place-density i:nth-child(1) { left: 6%; bottom: 32px; }.place-density i:nth-child(2) { left: 18%; bottom: 55px; }.place-density i:nth-child(3) { left: 70%; bottom: 30px; }.place-density i:nth-child(4) { left: 82%; bottom: 49px; }.place-density i:nth-child(5) { left: 52%; bottom: 38px; }.place-density i:nth-child(6) { left: 93%; bottom: 26px; }
-.density-wide { opacity: .13; }.density-mid { opacity: .35; }.density-narrow { opacity: .65; }
+.place-horizon { position: absolute; height: 18px; left: 0; right: 0; bottom: 0; background: #6aa9c1; opacity: .55; }
 .pressure-copy, .spacing-hint { color: #68717a; font-size: 13px; }.change-strip { font-size: 14px; padding: 8px 13px; border-radius: 7px; background: #fff4f4; }
 .outcome-panel, .meal-panel, .micro-task { width: min(100%, 330px); text-align: center; padding: 16px; border-radius: 12px; background: #f5f8fb; border: 1px solid #d8e2eb; line-height: 1.6; }.outcome-panel strong, .micro-task strong { font-size: 17px; }.outcome-panel small { color: #66727c; }.meal-outcome { background: #fff8e8; }
 .turn-log { font-size: 12px; color: #697680; padding: 7px 10px; border-left: 2px solid #9db6c7; }
@@ -578,6 +580,8 @@ html, body {
 .scene.day-phase-day { --sky: #a9daec; --ground: #82a998; --paper: #f2f7f7; }
 .scene.day-phase-sunset { --sky: #e6ad93; --ground: #767f91; --paper: #f5e6df; --ink: #523f49; }
 .scene.day-phase-night { --sky: #253953; --ground: #15283b; --paper: #152334; --ink: #e0eaf3; }
+.day-phase-sunset .beach-cliff-art::after { background: rgba(167, 94, 83, .13); }
+.day-phase-night .beach-cliff-art::after { background: rgba(12, 31, 61, .48); }
 .day-sky { width: min(100%, 340px); position: relative; color: var(--ink); }
 .day-sky svg { display: block; width: 100%; border-radius: 10px; background: var(--sky); }
 .day-sky span { position: absolute; bottom: 10px; left: 14px; font-size: 12px; }
@@ -586,7 +590,7 @@ html, body {
 .sky-moon, .sky-stars { display: none; fill: #dfebf6; }
 .day-phase-night .sky-sun { display: none; }
 .day-phase-night .sky-moon, .day-phase-night .sky-stars { display: block; }
-.scene[class*="day-phase-"] .place-landscape { background: linear-gradient(var(--sky) 0 56%, var(--ground) 57%); }
+.scene[class*="day-phase-"] .place-landscape:not(.landscape-beach) { background: linear-gradient(var(--sky) 0 56%, var(--ground) 57%); }
 .scene[class*="day-phase-"] .place-stage { background: var(--sky); }
 .scene[class*="day-phase-"] .journey-stage { background: var(--sky); color: var(--ink); }
 .scene[class*="day-phase-"] .stat-label { width: 76px; flex-shrink: 0; }

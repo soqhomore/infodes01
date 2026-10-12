@@ -8,6 +8,7 @@ import {
 import { updateDebug } from '../debug.js';
 import { pickEvent, downgradeView } from '../events.js';
 import { showEnding } from './ending.js';
+import beachCliffArt from '../art/beach-cliff.svg?raw';
 
 const JOURNEY_MS = SCENE_TIMING.journey;
 const AUTO_NEXT_MS = SCENE_TIMING.outcome;
@@ -18,7 +19,7 @@ const signed = value => `${value >= 0 ? '+' : ''}${value}`;
 const viewText = view => ({ wide: '열린 시야', mid: '중간 시야', narrow: '좁은 시야' })[view];
 
 function fishSVG(className = 'place-fish') {
-  return `<svg class="${className}" viewBox="0 0 72 48" aria-hidden="true"><ellipse cx="38" cy="24" rx="23" ry="16" fill="#5ba3d9"/><path d="M17 24 3 10v28z" fill="#3a7cbd"/><circle cx="45" cy="19" r="3" fill="#fff"/><circle cx="46" cy="19" r="1.4" fill="#222"/></svg>`;
+  return `<svg class="${className}" viewBox="0 0 72 48" aria-hidden="true" shape-rendering="crispEdges"><path d="M18 13h9V9h18v4h9v5h8v14h-8v6h-9v4H27v-4h-9v-6h-7V19h7z" fill="#5ba3d9"/><path d="M18 19h-6v12h6v6h9v4h18v-4h9v-6h8V19h-8v-6h-9V9H27v4h-9z" fill="#68afd0"/><path d="M18 18H7v-7h7v5h4zm0 13H7v7h7v-5h4z" fill="#3a7cbd"/><path d="M44 17h5v5h-5z" fill="#fff"/><path d="M46 18h3v4h-3z" fill="#253953"/></svg>`;
 }
 
 export function showTurn(app, ctx, goto) {
@@ -58,12 +59,14 @@ export function showTurn(app, ctx, goto) {
   }
 
   function placeHTML(card = state.currentCard, { showFish = true } = {}) {
+    const isBeach = card.id.startsWith('beach-') && !card.indoor;
     let fish = '';
     if (showFish) {
       const appearance = getFishAppearance(state);
       fish = `<span class="fish-swim" style="--fish-drop:${appearance.dropPx}px;--fish-tilt:${appearance.tiltDeg}deg;--fish-swim:${appearance.swimPx}px;--fish-duration:${appearance.swimSeconds}s"><span class="fish-posture">${fishSVG()}</span></span>`;
     }
-    return `<div class="place-stage view-${card.view}"><div class="place-density density-${card.view}"><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="place-window" style="--view-width:${VIEW_CLIP[card.view]}%"><div class="place-landscape">${fish}<span class="place-horizon"></span></div></div><div class="place-caption"><strong>${card.name}</strong><span>${card.indoor ? '실내' : '실외'} · ${viewText(card.view)}</span></div>${showFish ? `<p class="fish-state">몸: 통증 ${state.pain} · 마음: 여유 ${state.drive}</p>` : ''}</div>`;
+    const beachArt = isBeach ? `<div class="beach-cliff-art" role="img" aria-label="${card.name}의 해안 풍경">${beachCliffArt}</div>` : '';
+    return `<div class="place-stage view-${card.view}${isBeach ? ' beach-place' : ''}"><div class="place-window" style="--view-width:${VIEW_CLIP[card.view]}%"><div class="place-landscape${isBeach ? ' landscape-beach' : ''}">${beachArt}${fish}${isBeach ? '' : '<span class="place-horizon"></span>'}</div></div><div class="place-caption"><strong>${card.name}</strong><span>${card.indoor ? '실내' : '실외'} · ${viewText(card.view)}</span></div>${showFish ? `<p class="fish-state">몸: 통증 ${state.pain} · 마음: 여유 ${state.drive}</p>` : ''}</div>`;
   }
 
   function render(body, { journey = false, comparison = false, changes = {} } = {}) {
