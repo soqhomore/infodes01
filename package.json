@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "sim": "node scripts/sim.js",
-    "test": "node --test"
+    "test": "node --import ./test/helpers/raw-loader.js --test"
   },
   "dependencies": {
     "curtainsjs": "^8.1.6",
