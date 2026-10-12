@@ -1,6 +1,7 @@
 /** 방문 수와 독립된 휴식 기록, 하루 타임라인. */
 import { ACTIONS, DAY_START, DAY_END, formatTime } from '../state.js';
 import { buildResultData, describeRest } from '../records.js';
+import { createOceanBackground } from '../gl/setup.js';
 
 const VIEW_MARK = { narrow: '◐', mid: '◑', wide: '●' };
 const BAR_W = 30;
@@ -74,7 +75,11 @@ export function showResult(app, ctx) {
   const button = document.createElement('button'); button.className = 'btn'; button.textContent = '다시 여행하기';
   on(button, 'click', () => window.location.reload()); wrap.appendChild(button); app.appendChild(wrap);
 
+  // WebGL 바다 배경 마운트
+  const cleanupOcean = createOceanBackground(wrap);
+
   return () => {
+    cleanupOcean();
     listeners.forEach(({ el, type, fn }) => el.removeEventListener(type, fn));
   };
 }
